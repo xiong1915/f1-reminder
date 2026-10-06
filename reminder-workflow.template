@@ -1,12 +1,7 @@
 name: F1 Race 30-Min Reminder
 
 on:
-  schedule:
-    - cron: '0 8 9 10 *'
-    - cron: '0 12 9 10 *'
-    - cron: '30 8 10 10 *'
-    - cron: '30 12 10 10 *'
-    - cron: '30 11 11 10 *'
+__SCHEDULE__
   workflow_dispatch:
     inputs:
       test_mode:

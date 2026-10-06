@@ -1,0 +1,52 @@
+name: F1 Weekly Planner
+
+on:
+  schedule:
+    # 每周日北京时间12:07，规划随后7天
+    - cron: '7 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f1-reminder-execution
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check scheduler token
+        env:
+          SCHEDULE_TOKEN: ${{ secrets.SCHEDULE_TOKEN }}
+        run: |
+          if [ -z "$SCHEDULE_TOKEN" ]; then
+            echo "::error::请配置仅限本仓库的 SCHEDULE_TOKEN，Contents 和 Workflows 权限均需 Read and write"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.SCHEDULE_TOKEN }}
+      - name: Plan next seven days
+        run: node weekly-planner.js
+      - name: Save plan and exact reminder times
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add weekly-plan.json .github/workflows/f1-reminder.yml
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: plan weekly F1 reminders"
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                exit 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                git pull --rebase origin main
+              fi
+            done
+            echo "::error::计划未成功保存，现有远端计划仍保留"
+            exit 1
+          fi

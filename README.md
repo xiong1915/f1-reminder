@@ -1,52 +1,25 @@
-# 🏎️ F1 比赛开赛前云端巡检提醒服务 (GitHub Actions)
+# F1 每周赛程规划与开赛提醒
 
-**基于 GitHub Actions 7×24 小时云端轮询托管，开赛前自动向飞书/微信/钉钉推送赛程提醒卡片。**  
-运行于 GitHub 云端公共队列，无需购买个人云服务器。
+每周日北京时间 12:07 读取随后 7 天的赛程，保存 weekly-plan.json，并为每场比赛生成开赛前 30 分钟的 GitHub Actions 定时任务。无比赛时不生成比赛定时任务，也不发送消息。提醒阶段读取已保存的计划，不轮询赛程接口。
 
----
+## 设置
 
-## 📁 项目文件一览
+保留现有 PUSH_KEY（飞书等推送地址）及可选 PUSHPLUS_CHANNEL。
 
-- [reminder.js](reminder.js) - 核心赛程检测与多渠道推送脚本（Node.js 原生零依赖，秒级启动）
-- [.github/workflows/f1-reminder.yml](.github/workflows/f1-reminder.yml) - GitHub Actions 云端定时任务定义（每 10 分钟错峰巡检，支持并发防重与故障落盘）
-- [history.json](history.json) - 已推送比赛历史（云端自动提交维护，联合开赛时间严格防重）
-- [cache_2026.json](cache_2026.json) - 赛程本地/云端灾备缓存（7 天时效校验，应对远端 API 临时不可用）
+在仓库 Settings → Secrets and variables → Actions 中新增 SCHEDULE_TOKEN：
+- 使用 fine-grained personal access token，只选择 xiong1915/f1-reminder
+- Repository permissions：Contents 和 Workflows 均为 Read and write
+- 令牌到期前需要更新；不要把令牌提交到代码或日志
 
----
+设置后可在 Actions 中手动运行 F1 Weekly Planner，首次生成或刷新计划。每周规划不会发送测试消息。F1 Race 30-Min Reminder 的 test_mode 仅用于主动测试机器人通路。
 
-## ⚙️ 核心架构与健壮性设计
+## 行为与故障
 
-1. **双层提醒窗口与精准过滤**：
-   - **轮询提醒区间（20 ~ 35 分钟）**：常规巡检窗口，提醒即将到来的开赛；
-   - **紧急补发区间（0 < 剩余时间 < 20 分钟）**：针对 GitHub Actions 云端定时偶发的队列延迟，若进入该窗口，系统自动以“【即将开赛紧急提醒】”补发通知，卡片展示毫秒级实时重算后的剩余分钟；
-   - **严格防后发（剩余时间 <= 0）**：在发送前结合即时系统时间重新校验，一旦已开赛坚决不再发送提醒；
-   - **取消赛事过滤**：严格检查官方数据中的 `is_cancelled` 状态，已取消的赛事自动剔除不发；
-   - **改期联合防重**：防重键绑定具体 `date_start`，同一场比赛一旦因故调整开赛时间，新时间会自动重新触发提醒，绝不漏发。
-2. **并发控制与串行排队**：
-   - 配置了 `concurrency: f1-reminder-execution`，手动点击运行与定时触发自动串行排队执行，杜绝并发竞争导致同一场比赛发送两次。
-3. **即时写盘与故障保护**：
-   - 每场比赛推送成功后立即写盘；
-   - 历史文件格式严格校验（防空文件、防异常结构），损坏时拒绝静默忽略并自动备份，防止全量误发；
-   - GitHub Actions 无论检测脚本成功或部分报错，均通过 `if: always()` 尽力将已成功的历史记录与赛程缓存 commit 并通过 rebase 重试 push 到仓库。
-4. **日志安全与异常重试**：
-   - 请求超时与网络错误对 URL 深度脱敏，隐藏 Token / Webhook Key；
-   - 赛程拉取配备 3 次退避重试与本地降级备份缓存，接口抖动时绝不轻易报错。
-5. **全平台通道支持**：
-   - 飞书机器人（专属富文本交互式卡片）
-   - 企业微信（Markdown）
-   - 钉钉（Markdown）
-   - Server酱（Turbo 版）
-   - Pushplus（普通微信及微信ClawBot，强制 HTTPS）
-6. **独立测试入口**：
-   - 支持在 GitHub Actions 页面点击“Run workflow”时勾选 `test_mode`，直接向配置的 Webhook 发送一条模拟卡片以验证通道畅通。
-
----
-
-## 🚀 极简配置说明
-
-### 配置密钥（Secret）
-
-在 GitHub 仓库的 **Settings $\rightarrow$ Secrets and variables $\rightarrow$ Actions** 中添加：
-
-- **`PUSH_KEY`**：您的推送地址或 Token（例如飞书机器人 Webhook 地址、企业微信 Webhook、Pushplus Token 或 Server酱 Key）。
-- *(可选)* **`PUSHPLUS_CHANNEL`**：如使用 Pushplus 的微信 ClawBot，可填 `clawbot`；默认推送至服务号 `wechat`。
+- 规划失败、令牌缺失/过期、提交失败，会使任务报错；旧计划保留，不清空提醒历史
+- 提醒计划有效期 7 天，过期时停止依据旧计划发送并明确报错
+- 已取消的场次不排入计划；相同场次及相同时间只提醒一次，真正改期可重新提醒
+- 无比赛周只运行一次规划；有比赛周另加实际提醒次数
+- 保留练习、排位、冲刺和正赛提醒
+- 每周检查后发生的改期或取消，需要手动刷新计划，周内不会自动重新查询
+- GitHub 定时任务可能延迟或被丢弃，无法保证准点或每次送达；程序在开赛后不补发
+- 推送接口成功不等于每位群成员已收到或阅读

@@ -333,6 +333,19 @@ async function main() {
 
   const maxRetries = 3;
   let lastErr = null;
+  if (process.env.WEEKLY_PLAN === 'true') {
+    const plan = JSON.parse(fs.readFileSync(path.join(__dirname, 'weekly-plan.json'), 'utf8'));
+    if (plan.version !== 1 || !Array.isArray(plan.sessions) ||
+        !Number.isFinite(Date.parse(plan.valid_until)) || Date.now() >= Date.parse(plan.valid_until)) {
+      throw new Error('每周提醒计划缺失、损坏或已过期，请运行 F1 Weekly Planner');
+    }
+    const triggerCron = process.env.SCHEDULE_CRON || '';
+    sessions = plan.sessions.filter(s => !triggerCron || s.reminder_cron === triggerCron);
+    if (!sessions.length) {
+      console.log('当前计划无待提醒比赛，不发送消息');
+      return;
+    }
+  } else {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       sessions = await fetchJson(`https://api.openf1.org/v1/sessions?year=${year}`);
@@ -400,6 +413,8 @@ async function main() {
 
   if (!Array.isArray(sessions) || sessions.length === 0) {
     throw new Error(`[致命错误] 获取 F1 赛程数据连续 ${maxRetries} 次失败且无有效备份: ${lastErr ? lastErr.message : '空数据'}`);
+  }
+
   }
 
   const monitoredTypes = ['Practice', 'Qualifying', 'Sprint', 'Race'];
