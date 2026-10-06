@@ -36,13 +36,47 @@ jobs:
         run: |
           node reminder.js
 
-      - name: Save sent history to repository
-        # 核心保证：即使前序步骤发生推送报错，只要历史文件被修改，必定持久化提交并推送到远端仓库，杜绝重复推送！
+      - name: Save sent history and schedule cache to repository
+        # 即使前序推送报错，也要保存已成功推送的记录与本地拉取的赛程缓存，避免丢失与重复
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          # 1. 分别检查实际存在的文件再执行暂存，避免缺失文件导致失败或吞错
           if [ -f history.json ]; then
             git add history.json
-            git diff --staged --quiet || (git commit -m "chore: persist sent reminder history [skip ci]" && git push)
+          fi
+
+          for cache_file in cache_*.json; do
+            if [ -f "$cache_file" ]; then
+              git add "$cache_file"
+            fi
+          done
+
+          # 2. 若有文件变更则提交，并在重试耗尽或 rebase 冲突时明确失败报错
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: persist sent reminder history and schedule cache [skip ci]"
+            PUSH_SUCCESS=false
+            for i in 1 2 3; do
+              echo "Attempting git push (try $i/3)..."
+              if git push; then
+                PUSH_SUCCESS=true
+                break
+              fi
+              echo "Git push attempt $i failed."
+              if [ "$i" -lt 3 ]; then
+                echo "Pulling remote changes with rebase..."
+                if ! git pull --rebase origin main; then
+                  echo "Error: git pull --rebase failed or encountered conflicts. Aborting."
+                  exit 1
+                fi
+                sleep 2
+              fi
+            done
+
+            if [ "$PUSH_SUCCESS" != "true" ]; then
+              echo "Error: Failed to push commit after 3 attempts."
+              exit 1
+            fi
           fi

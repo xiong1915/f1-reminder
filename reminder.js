@@ -36,6 +36,8 @@ const SESSION_MAP = {
   "Sprint": "冲刺赛 (Sprint Race)", "Race": "大奖赛正赛 (Main Race)"
 };
 
+const CACHE_MAX_AGE_DAYS = 7; // 本地赛程缓存最大有效期（天），超过该天数的旧缓存拒绝作为灾备使用
+
 function translateCountry(c) { return COUNTRY_MAP[c] || c; }
 function translateLocation(l) { return LOCATION_MAP[l] || l; }
 function translateSession(s) { return SESSION_MAP[s] || s; }
@@ -247,16 +249,40 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
   }
 }
 
-// 严谨读取历史文件，损坏时拒绝静默忽略
+// 严谨读取历史文件，损坏时拒绝静默忽略，并备份异常文件
 function loadHistory(file) {
   if (!fs.existsSync(file)) return {};
+  let raw = '';
   try {
-    const raw = fs.readFileSync(file, 'utf-8').trim();
-    if (!raw) return {};
-    return JSON.parse(raw);
+    raw = fs.readFileSync(file, 'utf-8').trim();
   } catch (e) {
-    throw new Error(`[严重安全警报] 历史记录文件 ${file} 存在但损坏无法解析: ${e.message}。为防止全量重复推送，已中止执行！`);
+    throw new Error(`[历史记录读取失败] 读取 ${file} 出错: ${e.message}`);
   }
+
+  // 若文件存在但完全为空，可能是写入被异常中断导致截断
+  if (!raw) {
+    const corruptBackup = `${file}.corrupt.${Date.now()}`;
+    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
+    throw new Error(`[历史记录损坏] 文件 ${file} 存在但为空文件。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    const corruptBackup = `${file}.corrupt.${Date.now()}`;
+    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
+    throw new Error(`[历史记录损坏] 文件 ${file} 存在但 JSON 解析失败: ${e.message}。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
+  }
+
+  // 严格校验必须为普通对象且非数组、非null
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const corruptBackup = `${file}.corrupt.${Date.now()}`;
+    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
+    throw new Error(`[历史记录损坏] 文件 ${file} 内容不是有效的字典对象 (得到 ${Array.isArray(parsed) ? '数组' : typeof parsed})。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
+  }
+
+  return parsed;
 }
 
 // 立即安全写盘
@@ -311,8 +337,19 @@ async function main() {
     try {
       sessions = await fetchJson(`https://api.openf1.org/v1/sessions?year=${year}`);
       if (Array.isArray(sessions) && sessions.length > 0) {
-        // 成功获取，立即写入本地灾备缓存
-        try { fs.writeFileSync(cacheFile, JSON.stringify(sessions), 'utf-8'); } catch (e) {}
+        // 成功获取，写入带时间戳元数据的本地灾备缓存
+        try {
+          const cachePayload = {
+            version: 2,
+            year: year,
+            updated_at: new Date().toISOString(),
+            session_count: sessions.length,
+            sessions: sessions
+          };
+          fs.writeFileSync(cacheFile, JSON.stringify(cachePayload, null, 2), 'utf-8');
+        } catch (e) {
+          console.warn(`[缓存写入告警] 写入本地缓存失败: ${e.message}`);
+        }
         break;
       }
     } catch (e) {
@@ -324,13 +361,40 @@ async function main() {
     }
   }
 
-  // 若 3 次重试全失败，尝试灾备降级读取本地缓存
+  // 若 3 次重试全失败，尝试灾备降级读取本地缓存（严格校验有效期）
   if (!Array.isArray(sessions) || sessions.length === 0) {
     if (fs.existsSync(cacheFile)) {
       try {
-        sessions = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
-        console.warn(`[降级警告] 网络连接暂时受阻，已启用本地备份缓存数据进行赛程检测！(缓存条数: ${sessions.length})`);
-      } catch (e) {}
+        const rawCache = fs.readFileSync(cacheFile, 'utf-8');
+        const parsedCache = JSON.parse(rawCache);
+        let cachedSessions = null;
+        let updatedAt = null;
+
+        if (Array.isArray(parsedCache)) {
+          // 兼容旧格式纯数组
+          cachedSessions = parsedCache;
+        } else if (parsedCache && typeof parsedCache === 'object' && Array.isArray(parsedCache.sessions)) {
+          cachedSessions = parsedCache.sessions;
+          if (parsedCache.updated_at) updatedAt = new Date(parsedCache.updated_at);
+        }
+
+        if (Array.isArray(cachedSessions) && cachedSessions.length > 0) {
+          if (updatedAt && !isNaN(updatedAt.getTime())) {
+            const ageDays = (Date.now() - updatedAt.getTime()) / (24 * 3600 * 1000);
+            if (ageDays > CACHE_MAX_AGE_DAYS) {
+              console.error(`[缓存已过期] 本地缓存生成于 ${parsedCache.updated_at} (已过去 ${ageDays.toFixed(1)} 天，超出最大有效期 ${CACHE_MAX_AGE_DAYS} 天)。为防止依据过期赛程产生误报，拒绝启用该缓存！`);
+            } else {
+              sessions = cachedSessions;
+              console.warn(`[降级警告] 网络连接受阻，已启用本地赛程缓存 (更新于: ${parsedCache.updated_at}，缓存赛程数: ${sessions.length})`);
+            }
+          } else {
+            sessions = cachedSessions;
+            console.warn(`[降级警告] 网络连接受阻，已启用无有效时间戳的旧版赛程缓存 (缓存赛程数: ${sessions.length})`);
+          }
+        }
+      } catch (e) {
+        console.warn(`[缓存读取异常] 本地缓存文件存在但读取解析失败: ${e.message}`);
+      }
     }
   }
 
@@ -411,11 +475,18 @@ async function main() {
     );
     if (!isMatch) continue;
 
-    const diff = item.diff;
-    if (diff <= 0) continue; // 绝对不开赛后发
+    // 关键校准：每次进入判定重新获取当前实际时间，消除网络重试与耗时带来的时延漂移
+    const currentNow = Date.now();
+    const currentDiff = (item.startTime.getTime() - currentNow) / (60 * 1000);
 
-    const inStandard = diff >= WINDOW_STANDARD_MIN && diff <= WINDOW_STANDARD_MAX;
-    const inCatchUp = diff > 0 && diff < WINDOW_CATCHUP_MAX;
+    // 严格防线：若当前已开赛 (currentDiff <= 0)，坚决放弃发送开赛前提醒
+    if (currentDiff <= 0) {
+      console.log(`[已开赛/已过期，放弃提醒] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)} (已开赛 ${Math.abs(currentDiff).toFixed(1)} 分钟)`);
+      continue;
+    }
+
+    const inStandard = currentDiff >= WINDOW_STANDARD_MIN && currentDiff <= WINDOW_STANDARD_MAX;
+    const inCatchUp = currentDiff > 0 && currentDiff < WINDOW_CATCHUP_MAX;
 
     if (inStandard || inCatchUp) {
       if (history[item.key]) {
@@ -427,16 +498,17 @@ async function main() {
       const sn = translateSession(s.session_name);
       const loc = translateLocation(s.location);
       const stStr = new Date(item.startTime.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
-      const rem = Math.max(1, Math.round(diff));
+      const rem = Math.max(1, Math.round(currentDiff));
 
       const logType = inCatchUp ? '紧急补发' : '标准开赛前30分钟';
-      console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (倒计时: ${rem} 分钟)`);
+      console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (实时倒计时: ${rem} 分钟)`);
 
       try {
         await sendPush(pushKey, gp, sn, loc, stStr, rem, inCatchUp);
         // 发送成功后立即更新并写入历史磁盘，避免后续意外导致丢失！
+        const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
         history[item.key] = {
-          sent_at: beijingTimeStr,
+          sent_at: currentBeijingTime,
           mode: inCatchUp ? 'catch-up' : 'standard',
           gp, sn, stStr,
           rem_minutes: rem
