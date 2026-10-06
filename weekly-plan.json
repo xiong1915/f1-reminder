@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generated_at": "2026-10-06T17:11:55.806Z",
-  "valid_until": "2026-10-13T17:11:55.806Z",
+  "generated_at": "2026-10-06T18:04:28.319Z",
+  "valid_until": "2026-10-13T18:04:28.319Z",
   "sessions": [
     {
       "session_key": 11378,
@@ -19,6 +19,7 @@
       "gmt_offset": "08:00:00",
       "year": 2026,
       "is_cancelled": false,
+      "is_catchup": false,
       "remind_at": "2026-10-09T08:00:00.000Z",
       "reminder_cron": "0 8 9 10 *"
     },
@@ -38,6 +39,7 @@
       "gmt_offset": "08:00:00",
       "year": 2026,
       "is_cancelled": false,
+      "is_catchup": false,
       "remind_at": "2026-10-09T12:00:00.000Z",
       "reminder_cron": "0 12 9 10 *"
     },
@@ -57,6 +59,7 @@
       "gmt_offset": "08:00:00",
       "year": 2026,
       "is_cancelled": false,
+      "is_catchup": false,
       "remind_at": "2026-10-10T08:30:00.000Z",
       "reminder_cron": "30 8 10 10 *"
     },
@@ -76,6 +79,7 @@
       "gmt_offset": "08:00:00",
       "year": 2026,
       "is_cancelled": false,
+      "is_catchup": false,
       "remind_at": "2026-10-10T12:30:00.000Z",
       "reminder_cron": "30 12 10 10 *"
     },
@@ -95,6 +99,7 @@
       "gmt_offset": "08:00:00",
       "year": 2026,
       "is_cancelled": false,
+      "is_catchup": false,
       "remind_at": "2026-10-11T11:30:00.000Z",
       "reminder_cron": "30 11 11 10 *"
     }
