@@ -408,9 +408,17 @@ async function main() {
 
   for (const s of sessions) {
     if (!s.date_start) continue;
+    // 1. 严格过滤已被官方宣布取消的赛事，防止误发
+    if (s.is_cancelled === true) {
+      console.log(`[已取消赛事，跳过] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)} (原定: ${s.date_start})`);
+      continue;
+    }
+
     const st = new Date(s.date_start);
     const diffMins = (st.getTime() - now.getTime()) / (60 * 1000);
-    const key = String(s.session_key || `${s.year}_${s.country_name}_${s.session_name}_${s.date_start}`);
+    // 2. 防重唯一键必须绑定具体开赛时间，同一场比赛一旦改期 (date_start 改变) 允许在新时间重新提醒，绝不漏发
+    const baseId = s.session_key ? `key_${s.session_key}` : `${s.year}_${s.country_name}_${s.session_name}`;
+    const key = `${baseId}_${s.date_start}`;
 
     // 进行中赛程（开赛后 3 小时内）
     if (diffMins <= 0 && diffMins >= -180) {
