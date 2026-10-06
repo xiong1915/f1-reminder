@@ -2,9 +2,20 @@ name: F1 Race 30-Min Reminder
 
 on:
   schedule:
-    # 严格配合开赛前 30 分钟窗口（20~35 分钟），每 10 分钟云端自动检查一次 (UTC)
+    # 每 10 分钟自动巡检一次（配合开赛前 20~35 分钟标准窗口与 <20 分钟紧急补发窗口）
     - cron: '*/10 * * * *'
-  workflow_dispatch: # 支持在 GitHub 网页上手动点击立即测试
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: '发送一条模拟测试卡片到机器人 (用于验证通路)'
+        required: false
+        type: boolean
+        default: false
+
+# 串行排队执行，杜绝手动触发与定时触发并发冲突导致重复推送
+concurrency:
+  group: f1-reminder-execution
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,14 +32,17 @@ jobs:
         env:
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: |
           node reminder.js
 
       - name: Save sent history to repository
+        # 核心保证：即使前序步骤发生推送报错，只要历史文件被修改，必定持久化提交并推送到远端仓库，杜绝重复推送！
+        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           if [ -f history.json ]; then
             git add history.json
-            git diff --staged --quiet || (git commit -m "chore: update reminder history [skip ci]" && git push)
+            git diff --staged --quiet || (git commit -m "chore: persist sent reminder history [skip ci]" && git push)
           fi
