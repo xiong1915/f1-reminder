@@ -415,10 +415,13 @@ async function main() {
     }
 
     const st = new Date(s.date_start);
+    if (!Number.isFinite(st.getTime())) {
+      throw new Error(`无效开赛时间: ${s.session_key || s.session_name}`);
+    }
     const diffMins = (st.getTime() - now.getTime()) / (60 * 1000);
     // 2. 防重唯一键必须绑定具体开赛时间，同一场比赛一旦改期 (date_start 改变) 允许在新时间重新提醒，绝不漏发
     const baseId = s.session_key ? `key_${s.session_key}` : `${s.year}_${s.country_name}_${s.session_name}`;
-    const key = `${baseId}_${s.date_start}`;
+    const key = `${baseId}_${st.getTime()}`;
 
     // 进行中赛程（开赛后 3 小时内）
     if (diffMins <= 0 && diffMins >= -180) {
@@ -464,6 +467,23 @@ async function main() {
 
   const historyFile = path.join(__dirname, 'history.json');
   const history = loadHistory(historyFile);
+  // 兼容已上线的日期字符串键和最早的场次 ID 键，统一到 UTC 毫秒
+  for (const [oldKey, record] of Object.entries(history)) {
+    const match = oldKey.match(/^(.*)_(\d{4}-\d{2}-\d{2}T.*)$/);
+    let baseId, startMs;
+    if (match) {
+      baseId = match[1];
+      startMs = Date.parse(match[2]);
+    } else if (/^\d+$/.test(oldKey) && record && typeof record.stStr === 'string') {
+      baseId = `key_${oldKey}`;
+      startMs = Date.parse(record.stStr.replace(' ', 'T') + '+08:00');
+    }
+    if (baseId && Number.isFinite(startMs)) {
+      const normalizedKey = `${baseId}_${startMs}`;
+      if (!history[normalizedKey]) history[normalizedKey] = record;
+      delete history[oldKey];
+    }
+  }
 
   // 双层提醒窗口设计：
   // 1. 标准 30 分钟窗口：[20.0, 35.0] 分钟
