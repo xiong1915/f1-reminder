@@ -106,7 +106,10 @@ async function main() {
   if (process.env.GITHUB_OUTPUT) {
     try {
       fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_catchup=${hasCatchup ? 'true' : 'false'}\n`);
-    } catch (_) {}
+    } catch (err) {
+      console.error(`[严重异常] 写入 GITHUB_OUTPUT 失败: ${err.message}`);
+      throw err;
+    }
   }
 }
 module.exports = {cronAt, buildPlan, renderWorkflow};

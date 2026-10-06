@@ -119,10 +119,13 @@ function postJson(urlStr, payload) {
 
     req.on('error', (err) => {
       const netErr = new Error(`推送网络错误: ${err.message}`);
-      // 精确区分送达状态：
-      // 1. 若请求体尚未完全发出（!hasSentPayload），如 DNS 解析失败 (ENOTFOUND)、TCP 建连拒绝 (ECONNREFUSED) 等，明确未送达，可安全重试
-      // 2. 若请求体已发出（hasSentPayload），Node.js 客户端层无法可靠确认服务端是否已处理，保守判定为 uncertain，不自动重试
-      if (hasSentPayload || hasReceivedResponse) {
+      // 关键精确识别：若在建立连接阶段即发生失败（如 DNS 解析失败 ENOTFOUND、TCP 拒绝 ECONNREFUSED、主机不可达 EHOSTUNREACH 等）
+      // 此时数据在物理上绝不可能抵达服务端，100% 确定未送达，属于可安全重试故障
+      const preConnectCodes = ['ENOTFOUND', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH'];
+      if (err.code && preConnectCodes.includes(err.code)) {
+        netErr.deliveryStatus = 'not_delivered';
+        netErr.isSafeToRetry = true;
+      } else if (hasSentPayload || hasReceivedResponse) {
         netErr.deliveryStatus = 'uncertain';
         netErr.isDeliveryUncertain = true;
         netErr.isResponseTimeout = true;
@@ -195,7 +198,11 @@ function postForm(urlStr, formData) {
 
     req.on('error', (err) => {
       const netErr = new Error(`表单推送网络错误: ${err.message}`);
-      if (hasSentPayload || hasReceivedResponse) {
+      const preConnectCodes = ['ENOTFOUND', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH'];
+      if (err.code && preConnectCodes.includes(err.code)) {
+        netErr.deliveryStatus = 'not_delivered';
+        netErr.isSafeToRetry = true;
+      } else if (hasSentPayload || hasReceivedResponse) {
         netErr.deliveryStatus = 'uncertain';
         netErr.isDeliveryUncertain = true;
         netErr.isResponseTimeout = true;
@@ -224,6 +231,18 @@ function postForm(urlStr, formData) {
     hasSentPayload = true;
     req.end();
   });
+}
+
+// 严谨校验平台响应 JSON：若已拿到 HTTP 200 响应但正文解析损坏，说明服务端大概率已受理并广播，标记为 uncertain 防止重复发送
+function parseJsonResponse(channelName, resStr) {
+  try {
+    return JSON.parse(resStr);
+  } catch (e) {
+    const jsonErr = new Error(`[${channelName}] HTTP已返回200但响应非合法JSON: ${resStr}`);
+    jsonErr.deliveryStatus = 'uncertain';
+    jsonErr.isDeliveryUncertain = true;
+    throw jsonErr;
+  }
 }
 
 // 统一推送分发器
@@ -266,8 +285,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
       }
     };
     const resStr = await postJson(pushKey, cardPayload);
-    let parsed;
-    try { parsed = JSON.parse(resStr); } catch (e) { throw new Error(`[飞书] 返回非合法JSON: ${resStr}`); }
+    const parsed = parseJsonResponse('飞书', resStr);
     if (parsed.code !== 0 && parsed.StatusCode !== 0) {
       throw new Error(`[飞书] 接口返回业务错误 (code: ${parsed.code || parsed.StatusCode}, msg: ${parsed.msg || parsed.StatusMessage})`);
     }
@@ -278,8 +296,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
     const colorTag = isCatchUp ? "warning" : "info";
     const md = `### ${headerTitle}\n> **大奖赛**：${gpName}\n> **环节**：${sessionName}\n> **赛道**：${locName}\n> **开赛时间**：${timeStr} (北京时间)\n> **距离开赛**：<font color="${colorTag}">约 ${remMin} 分钟</font>\n\n${noteText}`;
     const resStr = await postJson(pushKey, { msgtype: 'markdown', markdown: { content: md } });
-    let parsed;
-    try { parsed = JSON.parse(resStr); } catch (e) { throw new Error(`[企业微信] 返回非合法JSON: ${resStr}`); }
+    const parsed = parseJsonResponse('企业微信', resStr);
     if (parsed.errcode !== 0) {
       throw new Error(`[企业微信] 接口返回业务错误 (errcode: ${parsed.errcode}, errmsg: ${parsed.errmsg})`);
     }
@@ -295,8 +312,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
       }
     };
     const resStr = await postJson(pushKey, dingPayload);
-    let parsed;
-    try { parsed = JSON.parse(resStr); } catch (e) { throw new Error(`[钉钉] 返回非合法JSON: ${resStr}`); }
+    const parsed = parseJsonResponse('钉钉', resStr);
     if (parsed.errcode !== 0) {
       throw new Error(`[钉钉] 接口返回业务错误 (errcode: ${parsed.errcode}, errmsg: ${parsed.errmsg})`);
     }
@@ -307,8 +323,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
     const targetUrl = pushKey.startsWith('http') ? pushKey : `https://sctapi.ftqq.com/${pushKey.trim()}.send`;
     const desp = `### ${headerTitle}\n- **大奖赛**：${gpName}\n- **环节**：${sessionName}\n- **赛道**：${locName}\n- **开赛时间**：${timeStr} (北京时间)\n- **距离开赛**：约 ${remMin} 分钟\n\n${noteText}`;
     const resStr = await postForm(targetUrl, { title, desp });
-    let parsed;
-    try { parsed = JSON.parse(resStr); } catch (e) { throw new Error(`[Server酱] 返回非合法JSON: ${resStr}`); }
+    const parsed = parseJsonResponse('Server酱', resStr);
     if (parsed.code !== 0 && (!parsed.data || parsed.data.error !== 'SUCCESS')) {
       throw new Error(`[Server酱] 接口返回业务错误 (code: ${parsed.code}, msg: ${parsed.message || parsed.info})`);
     }
@@ -324,8 +339,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
       channel: channel,
       template: channel === 'clawbot' ? 'txt' : 'markdown'
     });
-    let parsed;
-    try { parsed = JSON.parse(resStr); } catch (e) { throw new Error(`[Pushplus] 返回非合法JSON: ${resStr}`); }
+    const parsed = parseJsonResponse('Pushplus', resStr);
     if (parsed.code !== 200) {
       throw new Error(`[Pushplus] 接口返回业务错误 (code: ${parsed.code}, msg: ${parsed.msg})`);
     }
@@ -594,6 +608,7 @@ async function main() {
   const WINDOW_CATCHUP_MAX   = 20.0;
 
   let triggeredCount = 0;
+  let uncertainSkippedCount = 0;
   const errors = [];
 
   for (const item of upcoming) {
@@ -618,9 +633,17 @@ async function main() {
     const inCatchUp = currentDiff > 0 && currentDiff < WINDOW_CATCHUP_MAX;
 
     if (inStandard || inCatchUp) {
-      if (history[item.key]) {
-        console.log(`[已提醒过，跳过重复] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)}`);
-        continue;
+      const existing = history[item.key];
+      if (existing) {
+        const isSent = !existing.status || existing.status === 'sent';
+        if (existing.status === 'uncertain') {
+          console.warn(`::warning file=reminder.js::[待人工确认告警] 场次 ${item.key} (${translateCountry(s.country_name)} - ${translateSession(s.session_name)}) 先前推送状态不确定 (uncertain，尝试于 ${existing.attempted_at || '未知'})。为防重复发送，本次触发已跳过自动推送。`);
+          uncertainSkippedCount++;
+          continue;
+        } else if (isSent) {
+          console.log(`[已提醒过，跳过重复] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)}`);
+          continue;
+        }
       }
 
       const gp = `${translateCountry(s.country_name)} 大奖赛`;
@@ -633,6 +656,7 @@ async function main() {
       console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (实时倒计时: ${rem} 分钟)`);
 
       let pushSuccess = false;
+      let uncertainErr = null;
       const MAX_PUSH_RETRIES = 3;
       for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
         try {
@@ -647,6 +671,7 @@ async function main() {
           // 严禁记为已送达，记入 errors，由 GitHub Actions 异常告警。
           if (err.deliveryStatus === 'uncertain' || err.isDeliveryUncertain === true || err.isResponseTimeout === true) {
             console.error(`[推送状态不确定 (Uncertain)] 场次 ${item.key} 请求体已写出，但在获取完整响应前发生异常: ${err.message}。Node.js HTTP 层无法确认服务端是否已接收或已发送消息。为防群内重复轰炸，放弃自动重试；严禁记为发送成功，该场次已转交 Actions 异常告警。`);
+            uncertainErr = err;
             errors.push(err);
             break;
           }
@@ -667,14 +692,34 @@ async function main() {
       if (pushSuccess) {
         // 发送成功后立即更新并写入历史磁盘，避免后续意外导致丢失！
         const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+        const triggerType = inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup');
         history[item.key] = {
+          status: 'sent',
           sent_at: currentBeijingTime,
+          trigger: triggerType,
           mode: inCatchUp ? 'catch-up' : 'standard',
           gp, sn, stStr,
           rem_minutes: rem
         };
         saveHistory(historyFile, history);
         triggeredCount++;
+      } else if (uncertainErr) {
+        // 送达状态不确定 (Uncertain) 持久化：
+        // 关键防护：单独持久化 uncertain / attempted 状态，与 confirmed sent 状态严格区分！
+        // 绝不伪装为 success，不设置 pushSuccess=true，依然保留在 errors 数组并抛错使本次 Actions 报红告警。
+        // 持久化后，后续 backup cron 或补发任务读取 history 时可感知该状态，防止跨任务重复发送！
+        const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+        const triggerType = inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup');
+        history[item.key] = {
+          status: 'uncertain',
+          attempted_at: currentBeijingTime,
+          trigger: triggerType,
+          mode: inCatchUp ? 'catch-up' : 'standard',
+          gp, sn, stStr,
+          rem_minutes: rem,
+          error: uncertainErr.message
+        };
+        saveHistory(historyFile, history);
       }
     }
   }
@@ -685,6 +730,10 @@ async function main() {
     console.log(`当前无处于开赛前提醒区间 [0~35 分钟] 内的待通知环节。`);
   }
 
+  if (uncertainSkippedCount > 0) {
+    console.warn(`::warning::本次检查发现 ${uncertainSkippedCount} 场赛事先前推送状态为 uncertain，为防重复已跳过自动补发，请人工确认！`);
+  }
+
   // 关键：若有待通知场次但发送失败，必须抛错以使 GitHub Actions 报红告警
   if (errors.length > 0) {
     throw new Error(`本次检查中有 ${errors.length} 条推送发送失败: ${errors.map(e => e.message).join('; ')}`);
@@ -693,7 +742,19 @@ async function main() {
   console.log('=============================================');
 }
 
-main().catch((err) => {
-  console.error('[执行致命失败]', err.message);
-  process.exit(1);
-});
+module.exports = {
+  loadHistory,
+  saveHistory,
+  postJson,
+  postForm,
+  parseJsonResponse,
+  sendPush,
+  main
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[执行致命失败]', err.message);
+    process.exit(1);
+  });
+}

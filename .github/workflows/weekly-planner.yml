@@ -2,7 +2,7 @@ name: F1 Weekly Planner
 
 on:
   schedule:
-    # 每周日北京时间12:07，规划随后7天
+    # 每周日北京时间12:07，规划随后8天
     - cron: '7 4 * * 0'
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.SCHEDULE_TOKEN }}
-      - name: Plan next seven days
+      - name: Plan next eight days
         id: plan-step
         run: node weekly-planner.js
       - name: Save plan and exact reminder times
@@ -85,13 +85,19 @@ jobs:
             git add history.json
             if ! git diff --staged --quiet; then
               git commit -m "chore: persist catch-up reminder history [skip ci]"
+              PUSH_SUCCESS=false
               for attempt in 1 2 3; do
                 if git push origin HEAD:main; then
-                  exit 0
+                  PUSH_SUCCESS=true
+                  break
                 fi
                 if [ "$attempt" -lt 3 ]; then
                   git pull --rebase origin main
                 fi
               done
+              if [ "$PUSH_SUCCESS" != "true" ]; then
+                echo "::error::catch-up 历史记录推送失败，已达最大重试次数"
+                exit 1
+              fi
             fi
           fi
