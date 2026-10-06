@@ -4,4 +4,19 @@ config.json
 *.log
 .env
 wrangler.toml
+cf_worker.js
+f1_bot.js
+test_*.js
+inspect_*.js
+manage_*.js
+extract_*.js
+read_*.js
+find_*.js
+audit_*.js
+exhaustive_*.js
+f1_2026_calendar_condensed.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+
 
