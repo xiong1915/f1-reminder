@@ -2,8 +2,8 @@ name: F1 Race 30-Min Reminder
 
 on:
   schedule:
-    # 每 15 分钟云端自动检查一次 (UTC)
-    - cron: '*/15 * * * *'
+    # 严格配合开赛前 30 分钟窗口（20~35 分钟），每 10 分钟云端自动检查一次 (UTC)
+    - cron: '*/10 * * * *'
   workflow_dispatch: # 支持在 GitHub 网页上手动点击立即测试
 
 permissions:
