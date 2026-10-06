@@ -424,7 +424,9 @@ async function main() {
       throw new Error('每周提醒计划缺失、损坏或已过期，请运行 F1 Weekly Planner');
     }
     const triggerCron = process.env.SCHEDULE_CRON || '';
-    sessions = plan.sessions.filter(s => !triggerCron || s.reminder_cron === triggerCron);
+    sessions = plan.sessions.filter(s => 
+      !triggerCron || s.reminder_cron === triggerCron || s.backup_cron === triggerCron
+    );
     if (!sessions.length) {
       console.log('当前计划无待提醒比赛，不发送消息');
       return;

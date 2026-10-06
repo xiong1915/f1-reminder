@@ -8,7 +8,8 @@ function cronAt(ms) {
 }
 function buildPlan(sessions, now = Date.now()) {
   if (!Array.isArray(sessions)) throw new Error('赛程接口未返回数组');
-  const until = now + 7 * DAY;
+  // 规划未来8天，完整覆盖跨周日边界（如晚间正赛）及规划延迟容灾
+  const until = now + 8 * DAY;
   const selected = [];
   for (const s of sessions) {
     if (s.is_cancelled === true) continue;
@@ -20,29 +21,42 @@ function buildPlan(sessions, now = Date.now()) {
     // 已开赛或超出本周规划窗口则跳过
     if (start <= now || start >= until) continue;
 
-    const remind = start - 30 * 60000;
-    let targetRemindMs = remind;
+    const remindMain = start - 30 * 60000;
+    const remindBackup = start - 15 * 60000;
     let isCatchUp = false;
+    let reminderCron = null;
+    let backupCron = null;
 
-    // 关键防线：若规划因调度拥堵延迟运行，导致开赛前30分钟已过但尚未开赛 (start > now)，绝不遗漏！
-    // 标记为紧急即时补发，remind_at 设为当前时间，且不生成易过期的无效 cron 调度
-    if (remind < now) {
+    if (remindMain >= now) {
+      reminderCron = cronAt(remindMain);
+    }
+    if (remindBackup >= now) {
+      backupCron = cronAt(remindBackup);
+    }
+
+    // 若主提醒时间已过 (remindMain < now) 但尚未开赛 (start > now)，属于遗漏补发
+    if (remindMain < now) {
       isCatchUp = true;
-      targetRemindMs = now;
     }
 
     selected.push({
       ...s,
       is_catchup: isCatchUp,
-      remind_at: new Date(targetRemindMs).toISOString(),
-      reminder_cron: isCatchUp ? null : cronAt(targetRemindMs)
+      remind_at: new Date(isCatchUp ? now : remindMain).toISOString(),
+      reminder_cron: reminderCron,
+      backup_cron: backupCron
     });
   }
   selected.sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start));
   return {version: 1, generated_at: new Date(now).toISOString(), valid_until: new Date(until).toISOString(), sessions: selected};
 }
 function renderWorkflow(template, plan) {
-  const crons = [...new Set(plan.sessions.map(s => s.reminder_cron).filter(Boolean))];
+  const allCrons = [];
+  for (const s of plan.sessions) {
+    if (s.reminder_cron) allCrons.push(s.reminder_cron);
+    if (s.backup_cron) allCrons.push(s.backup_cron);
+  }
+  const crons = [...new Set(allCrons)];
   const schedule = crons.length ? '  schedule:\n' + crons.map(cron => "    - cron: '" + cron + "'").join('\n') : '';
   if (!template.includes('__SCHEDULE__')) throw new Error('缺少定时配置模板标记');
   return template.replace('__SCHEDULE__', schedule);
@@ -66,7 +80,7 @@ function getSessions(year) {
 async function main() {
   const now = Date.now();
   const firstYear = new Date(now).getUTCFullYear();
-  const lastYear = new Date(now + 7 * DAY).getUTCFullYear();
+  const lastYear = new Date(now + 8 * DAY).getUTCFullYear();
   const sessions = [];
   for (const year of new Set([firstYear, lastYear])) {
     let data;
@@ -81,7 +95,7 @@ async function main() {
   const workflow = renderWorkflow(template, plan);
   fs.writeFileSync(path.join(__dirname, 'weekly-plan.json'), JSON.stringify(plan, null, 2) + '\n');
   fs.writeFileSync(path.join(__dirname, '.github/workflows/f1-reminder.yml'), workflow);
-  console.log('已规划未来7天 ' + plan.sessions.length + ' 场提醒；没有比赛时不发送消息');
+  console.log('已规划未来8天 ' + plan.sessions.length + ' 场提醒 (含双重冗余 cron)；没有比赛时不发送消息');
 
   // 若存在开赛在即的遗漏补发场次，输出标记由具备推送互斥并发组的工作流任务执行，避免无锁并发推送
   const catchupSessions = plan.sessions.filter(s => s.is_catchup);
