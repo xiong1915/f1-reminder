@@ -1,5 +1,7 @@
 node_modules/
 bot_config.json
+config.json
 *.log
 .env
 wrangler.toml
+

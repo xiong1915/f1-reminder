@@ -10,9 +10,9 @@ __SCHEDULE__
         type: boolean
         default: false
 
-# 串行排队执行，杜绝手动触发与定时触发并发冲突导致重复推送
+# 独立隔离每个环节与执行的并发组，杜绝不同触发互相挤占取消排队中的提醒
 concurrency:
-  group: f1-reminder-execution
+  group: f1-reminder-${{ github.event.schedule || github.run_id }}
   cancel-in-progress: false
 
 permissions:

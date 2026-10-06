@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: f1-reminder-execution
+  group: f1-weekly-planner
   cancel-in-progress: false
 
 jobs:

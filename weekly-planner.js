@@ -16,9 +16,27 @@ function buildPlan(sessions, now = Date.now()) {
       [s.session_type, s.session_name].some(value => typeof value === 'string' && value.toLowerCase().includes(type.toLowerCase())))) continue;
     const start = Date.parse(s.date_start);
     if (!Number.isFinite(start)) throw new Error('赛程时间无效: ' + s.session_key);
+    
+    // 已开赛或超出本周规划窗口则跳过
+    if (start <= now || start >= until) continue;
+
     const remind = start - 30 * 60000;
-    if (remind < now || remind >= until) continue;
-    selected.push({...s, remind_at: new Date(remind).toISOString(), reminder_cron: cronAt(remind)});
+    let targetRemindMs = remind;
+    let isCatchUp = false;
+
+    // 关键防线：若规划因调度拥堵延迟运行，导致开赛前30分钟已过但尚未开赛 (start > now)，绝不遗漏！
+    // 立即排入补发计划，设定于下一分钟触发
+    if (remind < now) {
+      isCatchUp = true;
+      targetRemindMs = now + 60000;
+    }
+
+    selected.push({
+      ...s,
+      is_catchup: isCatchUp,
+      remind_at: new Date(targetRemindMs).toISOString(),
+      reminder_cron: cronAt(targetRemindMs)
+    });
   }
   selected.sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start));
   return {version: 1, generated_at: new Date(now).toISOString(), valid_until: new Date(until).toISOString(), sessions: selected};

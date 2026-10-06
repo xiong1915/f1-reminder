@@ -56,6 +56,7 @@ function fetchJson(url) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
     const req = client.get(url, { headers: { 'User-Agent': 'F1ReminderBot/1.0', 'Accept': 'application/json' } }, (res) => {
+      res.on('error', (err) => reject(new Error(`响应数据流传输中断: ${err.message}`)));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return reject(new Error(`HTTP ${res.statusCode} from ${sanitizeUrl(url)}`));
       }
@@ -82,6 +83,9 @@ function postJson(urlStr, payload) {
     const u = new URL(urlStr);
     const client = u.protocol === 'https:' ? https : http;
     const body = Buffer.from(JSON.stringify(payload), 'utf-8');
+    let hasSentPayload = false;
+    let hasReceivedResponse = false;
+
     const req = client.request(u, {
       method: 'POST',
       headers: {
@@ -90,6 +94,8 @@ function postJson(urlStr, payload) {
         'User-Agent': 'F1ReminderBot/1.0'
       }
     }, (res) => {
+      hasReceivedResponse = true;
+      res.on('error', (err) => reject(new Error(`响应数据流传输中断: ${err.message}`)));
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
@@ -99,12 +105,19 @@ function postJson(urlStr, payload) {
         resolve(data);
       });
     });
+
     req.on('error', (err) => reject(new Error(`推送网络错误: ${err.message}`)));
     req.setTimeout(15000, () => {
       req.destroy();
-      reject(new Error(`推送接口响应超时 (15s)`));
+      const err = new Error(`推送接口响应超时 (15s)`);
+      if (hasSentPayload && !hasReceivedResponse) {
+        err.isResponseTimeout = true;
+      }
+      reject(err);
     });
+
     req.write(body);
+    hasSentPayload = true;
     req.end();
   });
 }
@@ -115,6 +128,9 @@ function postForm(urlStr, formData) {
     const client = u.protocol === 'https:' ? https : http;
     const postData = querystring.stringify(formData);
     const body = Buffer.from(postData, 'utf-8');
+    let hasSentPayload = false;
+    let hasReceivedResponse = false;
+
     const req = client.request(u, {
       method: 'POST',
       headers: {
@@ -123,6 +139,8 @@ function postForm(urlStr, formData) {
         'User-Agent': 'F1ReminderBot/1.0'
       }
     }, (res) => {
+      hasReceivedResponse = true;
+      res.on('error', (err) => reject(new Error(`表单响应数据流传输中断: ${err.message}`)));
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
@@ -132,12 +150,19 @@ function postForm(urlStr, formData) {
         resolve(data);
       });
     });
+
     req.on('error', (err) => reject(new Error(`表单推送网络错误: ${err.message}`)));
     req.setTimeout(15000, () => {
       req.destroy();
-      reject(new Error(`表单推送接口超时 (15s)`));
+      const err = new Error(`表单推送接口超时 (15s)`);
+      if (hasSentPayload && !hasReceivedResponse) {
+        err.isResponseTimeout = true;
+      }
+      reject(err);
     });
+
     req.write(body);
+    hasSentPayload = true;
     req.end();
   });
 }
@@ -546,8 +571,32 @@ async function main() {
       const logType = inCatchUp ? '紧急补发' : '标准开赛前30分钟';
       console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (实时倒计时: ${rem} 分钟)`);
 
-      try {
-        await sendPush(pushKey, gp, sn, loc, stStr, rem, inCatchUp);
+      let pushSuccess = false;
+      const MAX_PUSH_RETRIES = 3;
+      for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
+        try {
+          await sendPush(pushKey, gp, sn, loc, stStr, rem, inCatchUp);
+          pushSuccess = true;
+          break;
+        } catch (err) {
+          // 关键防护：区分明确失败与“可能已送达但响应超时”
+          if (err.isResponseTimeout === true) {
+            console.warn(`[推送告警] 接口响应读取超时 (消息可能已送达): ${err.message}。为防止群内重复发送相同提醒，放弃二次盲目重发。`);
+            pushSuccess = true;
+            break;
+          }
+          if (attempt < MAX_PUSH_RETRIES) {
+            const delayMs = attempt * 2000;
+            console.warn(`[推送重试 ${attempt}/${MAX_PUSH_RETRIES}] 场次 ${item.key} 发送异常: ${err.message}，将在 ${delayMs / 1000}s 后重试...`);
+            await new Promise(r => setTimeout(r, delayMs));
+          } else {
+            console.error(`[推送彻底失败] 场次 ${item.key} 连续 ${MAX_PUSH_RETRIES} 次尝试均失败: ${err.message}`);
+            errors.push(err);
+          }
+        }
+      }
+
+      if (pushSuccess) {
         // 发送成功后立即更新并写入历史磁盘，避免后续意外导致丢失！
         const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
         history[item.key] = {
@@ -558,9 +607,6 @@ async function main() {
         };
         saveHistory(historyFile, history);
         triggeredCount++;
-      } catch (err) {
-        console.error(`[推送失败] 场次 ${item.key} 错误: ${err.message}`);
-        errors.push(err);
       }
     }
   }
