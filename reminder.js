@@ -28,6 +28,8 @@ const {
   isCatchupWindow
 } = require('./src/timing');
 
+const CACHE_MAX_AGE_DAYS = 7; // 本地赛程缓存最大有效期（天），超过该天数的旧缓存拒绝作为灾备使用
+
 // URL 日志脱敏，防止在错误日志中泄露 token 或 webhook key
 function sanitizeUrl(urlStr) {
   try {
@@ -663,6 +665,7 @@ async function main() {
 }
 
 module.exports = {
+  CACHE_MAX_AGE_DAYS,
   COUNTRY_MAP,
   LOCATION_MAP,
   SESSION_MAP,

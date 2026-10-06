@@ -8,7 +8,12 @@ const { postJson, parseJsonResponse } = require('../reminder');
 const { loadHistory, saveHistory, isSentRecord, isUncertainRecord } = require('../src/history');
 
 test('Delivery State: 建连前错误归类为 not_delivered 并允许安全重试', async () => {
-  const unusedPort = 59997;
+  // 动态获取一个本地临时端口并关闭，确保该端口处于未监听状态 (ECONNREFUSED)
+  const probeServer = http.createServer();
+  await new Promise(resolve => probeServer.listen(0, '127.0.0.1', resolve));
+  const unusedPort = probeServer.address().port;
+  await new Promise(resolve => probeServer.close(resolve));
+
   let capturedErr;
   try {
     await postJson(`http://127.0.0.1:${unusedPort}/fail`, { test: true });
@@ -103,7 +108,7 @@ test('Delivery State: 离线模拟主 cron 遇断流记录 uncertain，备用 cr
   assert.strictEqual(backupSentNetwork, false, '备用 cron 绝不能发送网络请求');
   assert.strictEqual(networkRequestsCount, 1, '总网络请求严格为 1 次，杜绝重复推送');
 
-  // 清理
-  mockServer.close();
+  // 清理：等待 mockServer 正常完成关闭
+  await new Promise(resolve => mockServer.close(resolve));
   try { fs.unlinkSync(tmpHistory); } catch (_) {}
 });
