@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# LEGACY: 当前 GitHub Actions 生产流程不使用此文件，生产入口为 reminder.js
 """
 F1 Race Reminder - 云端定时检测与微信推送脚本
 支持 GitHub Actions 7x24 小时零服务器免费运行

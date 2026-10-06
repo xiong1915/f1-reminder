@@ -1,0 +1,10 @@
+{
+  "name": "f1-reminder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "F1 race reminder bot for GitHub Actions",
+  "scripts": {
+    "check": "node --check reminder.js && node --check weekly-planner.js",
+    "test": "node --test \"tests/**/*.test.js\""
+  }
+}

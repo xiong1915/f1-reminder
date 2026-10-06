@@ -5,42 +5,28 @@ const fs = require('fs');
 const path = require('path');
 const querystring = require('querystring');
 
-const COUNTRY_MAP = {
-  "Bahrain": "巴林", "Saudi Arabia": "沙特阿拉伯", "Australia": "澳大利亚", "Japan": "日本",
-  "China": "中国", "United States": "美国", "Italy": "意大利", "Monaco": "摩纳哥",
-  "Canada": "加拿大", "Spain": "西班牙", "Austria": "奥地利", "Great Britain": "英国",
-  "Hungary": "匈牙利", "Belgium": "比利时", "Netherlands": "荷兰", "Azerbaijan": "阿塞拜疆",
-  "Singapore": "新加坡", "Mexico": "墨西哥", "Brazil": "巴西", "Qatar": "卡塔尔",
-  "United Arab Emirates": "阿联酋"
-};
-
-const LOCATION_MAP = {
-  "Sakhir": "萨基尔 (巴林国际赛道)", "Jeddah": "吉达 (吉达滨海赛道)",
-  "Melbourne": "墨尔本 (阿尔伯特公园赛道)", "Suzuka": "铃鹿 (铃鹿赛道)",
-  "Shanghai": "上海 (上海国际赛车场)", "Miami": "迈阿密 (迈阿密国际赛道)",
-  "Imola": "伊莫拉 (恩佐与迪诺·法拉利赛道)", "Monaco": "蒙特卡洛 (摩纳哥赛道)",
-  "Montreal": "蒙特利尔 (吉尔·维伦纽夫赛道)", "Barcelona": "巴塞罗那 (加泰罗尼亚赛道)",
-  "Spielberg": "施皮尔贝格 (红牛环赛道)", "Silverstone": "银石 (银石赛道)",
-  "Budapest": "布达佩斯 (亨格罗宁赛道)", "Spa": "斯帕 (斯帕-弗朗科尔尚赛道)",
-  "Zandvoort": "赞德福特 (赞德福特赛道)", "Monza": "蒙扎 (蒙扎国家赛车场)",
-  "Baku": "巴库 (巴库城市赛道)", "Marina Bay": "滨海湾 (滨海湾市街赛道)",
-  "Austin": "奥斯汀 (美洲赛道 COTA)", "Mexico City": "墨西哥城 (罗德里格斯兄弟赛道)",
-  "Sao Paulo": "圣保罗 (若泽·卡洛斯·帕塞赛道)", "Las Vegas": "拉斯维加斯 (拉斯维加斯大道赛道)",
-  "Lusail": "卢塞尔 (卢塞尔国际赛车场)", "Yas Marina": "亚斯码头 (亚斯码头赛道)"
-};
-
-const SESSION_MAP = {
-  "Practice 1": "第一次自由练习赛 (FP1)", "Practice 2": "第二次自由练习赛 (FP2)",
-  "Practice 3": "第三次自由练习赛 (FP3)", "Qualifying": "排位赛 (Qualifying)",
-  "Sprint Qualifying": "冲刺排位赛 (Sprint Quali)", "Sprint Shootout": "冲刺排位赛 (Sprint Shootout)",
-  "Sprint": "冲刺赛 (Sprint Race)", "Race": "大奖赛正赛 (Main Race)"
-};
-
-const CACHE_MAX_AGE_DAYS = 7; // 本地赛程缓存最大有效期（天），超过该天数的旧缓存拒绝作为灾备使用
-
-function translateCountry(c) { return COUNTRY_MAP[c] || c; }
-function translateLocation(l) { return LOCATION_MAP[l] || l; }
-function translateSession(s) { return SESSION_MAP[s] || s; }
+const {
+  COUNTRY_MAP,
+  LOCATION_MAP,
+  SESSION_MAP,
+  translateCountry,
+  translateLocation,
+  translateSession
+} = require('./src/translations');
+const {
+  loadHistory,
+  saveHistory,
+  normalizeHistoryKeys,
+  isSentRecord,
+  isUncertainRecord
+} = require('./src/history');
+const {
+  WINDOW_STANDARD_MIN,
+  WINDOW_STANDARD_MAX,
+  WINDOW_CATCHUP_MAX,
+  isStandardWindow,
+  isCatchupWindow
+} = require('./src/timing');
 
 // URL 日志脱敏，防止在错误日志中泄露 token 或 webhook key
 function sanitizeUrl(urlStr) {
@@ -347,48 +333,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
   }
 }
 
-// 严谨读取历史文件，损坏时拒绝静默忽略，并备份异常文件
-function loadHistory(file) {
-  if (!fs.existsSync(file)) return {};
-  let raw = '';
-  try {
-    raw = fs.readFileSync(file, 'utf-8').trim();
-  } catch (e) {
-    throw new Error(`[历史记录读取失败] 读取 ${file} 出错: ${e.message}`);
-  }
 
-  // 若文件存在但完全为空，可能是写入被异常中断导致截断
-  if (!raw) {
-    const corruptBackup = `${file}.corrupt.${Date.now()}`;
-    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
-    throw new Error(`[历史记录损坏] 文件 ${file} 存在但为空文件。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    const corruptBackup = `${file}.corrupt.${Date.now()}`;
-    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
-    throw new Error(`[历史记录损坏] 文件 ${file} 存在但 JSON 解析失败: ${e.message}。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
-  }
-
-  // 严格校验必须为普通对象且非数组、非null
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    const corruptBackup = `${file}.corrupt.${Date.now()}`;
-    try { fs.copyFileSync(file, corruptBackup); } catch (_) {}
-    throw new Error(`[历史记录损坏] 文件 ${file} 内容不是有效的字典对象 (得到 ${Array.isArray(parsed) ? '数组' : typeof parsed})。已备份至 ${corruptBackup}。为防止全量重复推送，已中止执行！`);
-  }
-
-  return parsed;
-}
-
-// 立即安全写盘
-function saveHistory(file, historyObj) {
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(historyObj, null, 2), 'utf-8');
-  fs.renameSync(tmp, file);
-}
 
 async function main() {
   let pushKey = (process.env.PUSH_KEY || '').trim();
@@ -581,31 +526,7 @@ async function main() {
   console.log('---------------------------------------------');
 
   const historyFile = path.join(__dirname, 'history.json');
-  const history = loadHistory(historyFile);
-  // 兼容已上线的日期字符串键和最早的场次 ID 键，统一到 UTC 毫秒
-  for (const [oldKey, record] of Object.entries(history)) {
-    const match = oldKey.match(/^(.*)_(\d{4}-\d{2}-\d{2}T.*)$/);
-    let baseId, startMs;
-    if (match) {
-      baseId = match[1];
-      startMs = Date.parse(match[2]);
-    } else if (/^\d+$/.test(oldKey) && record && typeof record.stStr === 'string') {
-      baseId = `key_${oldKey}`;
-      startMs = Date.parse(record.stStr.replace(' ', 'T') + '+08:00');
-    }
-    if (baseId && Number.isFinite(startMs)) {
-      const normalizedKey = `${baseId}_${startMs}`;
-      if (!history[normalizedKey]) history[normalizedKey] = record;
-      delete history[oldKey];
-    }
-  }
-
-  // 双层提醒窗口设计：
-  // 1. 标准 30 分钟窗口：[20.0, 35.0] 分钟
-  // 2. 紧急补发窗口 (Catch-up Window)：(0, 20.0) 分钟（防止 GitHub 调度偶尔排队延迟导致错过窗口）
-  const WINDOW_STANDARD_MIN = 20.0;
-  const WINDOW_STANDARD_MAX = 35.0;
-  const WINDOW_CATCHUP_MAX   = 20.0;
+  const history = normalizeHistoryKeys(loadHistory(historyFile));
 
   let triggeredCount = 0;
   let uncertainSkippedCount = 0;
@@ -629,18 +550,17 @@ async function main() {
       continue;
     }
 
-    const inStandard = currentDiff >= WINDOW_STANDARD_MIN && currentDiff <= WINDOW_STANDARD_MAX;
-    const inCatchUp = currentDiff > 0 && currentDiff < WINDOW_CATCHUP_MAX;
+    const inStandard = isStandardWindow(currentDiff);
+    const inCatchUp = isCatchupWindow(currentDiff);
 
     if (inStandard || inCatchUp) {
       const existing = history[item.key];
       if (existing) {
-        const isSent = !existing.status || existing.status === 'sent';
-        if (existing.status === 'uncertain') {
+        if (isUncertainRecord(existing)) {
           console.warn(`::warning file=reminder.js::[待人工确认告警] 场次 ${item.key} (${translateCountry(s.country_name)} - ${translateSession(s.session_name)}) 先前推送状态不确定 (uncertain，尝试于 ${existing.attempted_at || '未知'})。为防重复发送，本次触发已跳过自动推送。`);
           uncertainSkippedCount++;
           continue;
-        } else if (isSent) {
+        } else if (isSentRecord(existing)) {
           console.log(`[已提醒过，跳过重复] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)}`);
           continue;
         }
@@ -743,8 +663,22 @@ async function main() {
 }
 
 module.exports = {
+  COUNTRY_MAP,
+  LOCATION_MAP,
+  SESSION_MAP,
+  translateCountry,
+  translateLocation,
+  translateSession,
   loadHistory,
   saveHistory,
+  normalizeHistoryKeys,
+  isSentRecord,
+  isUncertainRecord,
+  WINDOW_STANDARD_MIN,
+  WINDOW_STANDARD_MAX,
+  WINDOW_CATCHUP_MAX,
+  isStandardWindow,
+  isCatchupWindow,
   postJson,
   postForm,
   parseJsonResponse,
