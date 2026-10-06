@@ -17,6 +17,8 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      has_catchup: ${{ steps.plan-step.outputs.has_catchup }}
     steps:
       - name: Check scheduler token
         env:
@@ -31,6 +33,7 @@ jobs:
           ref: main
           token: ${{ secrets.SCHEDULE_TOKEN }}
       - name: Plan next seven days
+        id: plan-step
         run: node weekly-planner.js
       - name: Save plan and exact reminder times
         run: |
@@ -49,4 +52,46 @@ jobs:
             done
             echo "::error::计划未成功保存，现有远端计划仍保留"
             exit 1
+          fi
+
+  catchup-reminder:
+    needs: plan
+    if: needs.plan.outputs.has_catchup == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 关键防线：补发推送必须与 f1-reminder 工作流共享同一个互斥并发组，杜绝并发读取旧历史与重复推送
+    concurrency:
+      group: f1-reminder-execution
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.SCHEDULE_TOKEN }}
+      - name: Send catch-up reminder
+        env:
+          WEEKLY_PLAN: 'true'
+          SCHEDULE_CRON: ''
+          PUSH_KEY: ${{ secrets.PUSH_KEY }}
+          PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
+        run: |
+          node reminder.js
+      - name: Save updated history
+        if: always()
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          if [ -f history.json ]; then
+            git add history.json
+            if ! git diff --staged --quiet; then
+              git commit -m "chore: persist catch-up reminder history [skip ci]"
+              for attempt in 1 2 3; do
+                if git push origin HEAD:main; then
+                  exit 0
+                fi
+                if [ "$attempt" -lt 3 ]; then
+                  git pull --rebase origin main
+                fi
+              done
+            fi
           fi

@@ -25,24 +25,24 @@ function buildPlan(sessions, now = Date.now()) {
     let isCatchUp = false;
 
     // 关键防线：若规划因调度拥堵延迟运行，导致开赛前30分钟已过但尚未开赛 (start > now)，绝不遗漏！
-    // 立即排入补发计划，设定于下一分钟触发
+    // 标记为紧急即时补发，remind_at 设为当前时间，且不生成易过期的无效 cron 调度
     if (remind < now) {
       isCatchUp = true;
-      targetRemindMs = now + 60000;
+      targetRemindMs = now;
     }
 
     selected.push({
       ...s,
       is_catchup: isCatchUp,
       remind_at: new Date(targetRemindMs).toISOString(),
-      reminder_cron: cronAt(targetRemindMs)
+      reminder_cron: isCatchUp ? null : cronAt(targetRemindMs)
     });
   }
   selected.sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start));
   return {version: 1, generated_at: new Date(now).toISOString(), valid_until: new Date(until).toISOString(), sessions: selected};
 }
 function renderWorkflow(template, plan) {
-  const crons = [...new Set(plan.sessions.map(s => s.reminder_cron))];
+  const crons = [...new Set(plan.sessions.map(s => s.reminder_cron).filter(Boolean))];
   const schedule = crons.length ? '  schedule:\n' + crons.map(cron => "    - cron: '" + cron + "'").join('\n') : '';
   if (!template.includes('__SCHEDULE__')) throw new Error('缺少定时配置模板标记');
   return template.replace('__SCHEDULE__', schedule);
@@ -82,6 +82,18 @@ async function main() {
   fs.writeFileSync(path.join(__dirname, 'weekly-plan.json'), JSON.stringify(plan, null, 2) + '\n');
   fs.writeFileSync(path.join(__dirname, '.github/workflows/f1-reminder.yml'), workflow);
   console.log('已规划未来7天 ' + plan.sessions.length + ' 场提醒；没有比赛时不发送消息');
+
+  // 若存在开赛在即的遗漏补发场次，输出标记由具备推送互斥并发组的工作流任务执行，避免无锁并发推送
+  const catchupSessions = plan.sessions.filter(s => s.is_catchup);
+  const hasCatchup = catchupSessions.length > 0;
+  if (hasCatchup) {
+    console.log(`[即时补发标记] 检测到 ${catchupSessions.length} 场临近开赛遗漏场次，将交由互斥推送任务执行...`);
+  }
+  if (process.env.GITHUB_OUTPUT) {
+    try {
+      fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_catchup=${hasCatchup ? 'true' : 'false'}\n`);
+    } catch (_) {}
+  }
 }
 module.exports = {cronAt, buildPlan, renderWorkflow};
 if (require.main === module) main().catch(err => { console.error(err.message); process.exitCode = 1; });

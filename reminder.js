@@ -95,23 +95,55 @@ function postJson(urlStr, payload) {
       }
     }, (res) => {
       hasReceivedResponse = true;
-      res.on('error', (err) => reject(new Error(`响应数据流传输中断: ${err.message}`)));
+      res.on('error', (err) => {
+        const streamErr = new Error(`响应数据流传输中断: ${err.message}`);
+        // 已收到响应头，说明服务端已受理请求，但在接收完整响应体时发生中断；送达状态不确定，不可自动重试
+        streamErr.deliveryStatus = 'uncertain';
+        streamErr.isDeliveryUncertain = true;
+        streamErr.isResponseTimeout = true;
+        reject(streamErr);
+      });
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          const httpErr = new Error(`HTTP ${res.statusCode}: ${data}`);
+          // 明确收到服务端响应，属于明确响应失败
+          httpErr.deliveryStatus = 'failed_response';
+          httpErr.isHttpFailure = true;
+          return reject(httpErr);
         }
         resolve(data);
       });
     });
 
-    req.on('error', (err) => reject(new Error(`推送网络错误: ${err.message}`)));
+    req.on('error', (err) => {
+      const netErr = new Error(`推送网络错误: ${err.message}`);
+      // 精确区分送达状态：
+      // 1. 若请求体尚未完全发出（!hasSentPayload），如 DNS 解析失败 (ENOTFOUND)、TCP 建连拒绝 (ECONNREFUSED) 等，明确未送达，可安全重试
+      // 2. 若请求体已发出（hasSentPayload），Node.js 客户端层无法可靠确认服务端是否已处理，保守判定为 uncertain，不自动重试
+      if (hasSentPayload || hasReceivedResponse) {
+        netErr.deliveryStatus = 'uncertain';
+        netErr.isDeliveryUncertain = true;
+        netErr.isResponseTimeout = true;
+      } else {
+        netErr.deliveryStatus = 'not_delivered';
+        netErr.isSafeToRetry = true;
+      }
+      reject(netErr);
+    });
+
     req.setTimeout(15000, () => {
       req.destroy();
       const err = new Error(`推送接口响应超时 (15s)`);
-      if (hasSentPayload && !hasReceivedResponse) {
+      if (hasSentPayload) {
+        // 请求体已发出但在时限内未获完整服务端确认，保守判定为 uncertain
+        err.deliveryStatus = 'uncertain';
+        err.isDeliveryUncertain = true;
         err.isResponseTimeout = true;
+      } else {
+        err.deliveryStatus = 'not_delivered';
+        err.isSafeToRetry = true;
       }
       reject(err);
     });
@@ -140,23 +172,50 @@ function postForm(urlStr, formData) {
       }
     }, (res) => {
       hasReceivedResponse = true;
-      res.on('error', (err) => reject(new Error(`表单响应数据流传输中断: ${err.message}`)));
+      res.on('error', (err) => {
+        const streamErr = new Error(`表单响应数据流传输中断: ${err.message}`);
+        // 已收到响应头，说明服务端已受理请求，但在接收完整响应体时发生中断；送达状态不确定，不可自动重试
+        streamErr.deliveryStatus = 'uncertain';
+        streamErr.isDeliveryUncertain = true;
+        streamErr.isResponseTimeout = true;
+        reject(streamErr);
+      });
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          const httpErr = new Error(`HTTP ${res.statusCode}: ${data}`);
+          httpErr.deliveryStatus = 'failed_response';
+          httpErr.isHttpFailure = true;
+          return reject(httpErr);
         }
         resolve(data);
       });
     });
 
-    req.on('error', (err) => reject(new Error(`表单推送网络错误: ${err.message}`)));
+    req.on('error', (err) => {
+      const netErr = new Error(`表单推送网络错误: ${err.message}`);
+      if (hasSentPayload || hasReceivedResponse) {
+        netErr.deliveryStatus = 'uncertain';
+        netErr.isDeliveryUncertain = true;
+        netErr.isResponseTimeout = true;
+      } else {
+        netErr.deliveryStatus = 'not_delivered';
+        netErr.isSafeToRetry = true;
+      }
+      reject(netErr);
+    });
+
     req.setTimeout(15000, () => {
       req.destroy();
       const err = new Error(`表单推送接口超时 (15s)`);
-      if (hasSentPayload && !hasReceivedResponse) {
+      if (hasSentPayload) {
+        err.deliveryStatus = 'uncertain';
+        err.isDeliveryUncertain = true;
         err.isResponseTimeout = true;
+      } else {
+        err.deliveryStatus = 'not_delivered';
+        err.isSafeToRetry = true;
       }
       reject(err);
     });
@@ -579,15 +638,22 @@ async function main() {
           pushSuccess = true;
           break;
         } catch (err) {
-          // 关键防护：区分明确失败与“可能已送达但响应超时”
-          if (err.isResponseTimeout === true) {
-            console.warn(`[推送告警] 接口响应读取超时 (消息可能已送达): ${err.message}。为防止群内重复发送相同提醒，放弃二次盲目重发。`);
-            pushSuccess = true;
+          // 分类 1: 送达状态不确定 (Uncertain)
+          // 请求体已写出，但在收到服务端完整确认前发生超时、网络中断或流中断。
+          // Node.js HTTP 层无法确认服务端是否已接收或处理该消息。
+          // 为防止可能导致的重复推送轰炸，保守放弃自动重试；
+          // 严禁记为已送达，记入 errors，由 GitHub Actions 异常告警。
+          if (err.deliveryStatus === 'uncertain' || err.isDeliveryUncertain === true || err.isResponseTimeout === true) {
+            console.error(`[推送状态不确定 (Uncertain)] 场次 ${item.key} 请求体已写出，但在获取完整响应前发生异常: ${err.message}。Node.js HTTP 层无法确认服务端是否已接收或已发送消息。为防群内重复轰炸，放弃自动重试；严禁记为发送成功，该场次已转交 Actions 异常告警。`);
+            errors.push(err);
             break;
           }
+
+          // 分类 2 & 3: 明确未送达 (可安全重试) 或 明确收到服务端业务失败响应
           if (attempt < MAX_PUSH_RETRIES) {
             const delayMs = attempt * 2000;
-            console.warn(`[推送重试 ${attempt}/${MAX_PUSH_RETRIES}] 场次 ${item.key} 发送异常: ${err.message}，将在 ${delayMs / 1000}s 后重试...`);
+            const retryDesc = err.deliveryStatus === 'not_delivered' ? '明确未送达，执行安全重试' : '收到明确服务失败响应，执行受控重试';
+            console.warn(`[推送重试 ${attempt}/${MAX_PUSH_RETRIES}] 场次 ${item.key} (${retryDesc}): ${err.message}，将在 ${delayMs / 1000}s 后重试...`);
             await new Promise(r => setTimeout(r, delayMs));
           } else {
             console.error(`[推送彻底失败] 场次 ${item.key} 连续 ${MAX_PUSH_RETRIES} 次尝试均失败: ${err.message}`);
