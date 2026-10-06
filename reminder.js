@@ -62,10 +62,48 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin) 
   const title = `🏎️ F1 比赛开赛提醒: ${gpName}`;
   const content = `🏎️ 【F1 比赛即将开赛提醒】\n━━━━━━━━━━━━━━━━━━\n🏆 大奖赛：${gpName}\n⏱️ 环节：${sessionName}\n📍 赛道：${locName}\n⏰ 开赛时间：${timeStr} (北京时间)\n⏳ 倒计时：约 ${remMin} 分钟\n━━━━━━━━━━━━━━━━━━\n🏁 请准备好观赛！`;
   
-  if (pushKey.includes('qyapi.weixin.qq.com')) {
+  if (pushKey.includes('open.feishu.cn') || pushKey.includes('larksuite.com')) {
+    // 飞书机器人交互式卡片
+    const cardPayload = {
+      msg_type: "interactive",
+      card: {
+        header: {
+          title: { tag: "plain_text", content: "🏎️ F1 比赛即将开赛提醒 (前30分钟)" },
+          template: "carmine"
+        },
+        elements: [
+          {
+            tag: "div",
+            text: {
+              tag: "lark_md",
+              content: `**🏆 大奖赛**：${gpName}\n**⏱️ 环节**：${sessionName}\n**📍 赛道地点**：${locName}\n**⏰ 开赛时间**：${timeStr} (北京时间)\n**⏳ 倒计时**：约 **${remMin} 分钟**`
+            }
+          },
+          {
+            tag: "note",
+            elements: [
+              { tag: "plain_text", content: "🏁 五盏红灯熄灭，精彩即将开战，请做好观赛准备！" }
+            ]
+          }
+        ]
+      }
+    };
+    const res = await postJson(pushKey, cardPayload);
+    console.log('[飞书响应]', res);
+  } else if (pushKey.includes('qyapi.weixin.qq.com')) {
     const md = `### 🏎️ F1 比赛即将开赛提醒\n> **大奖赛**：${gpName}\n> **环节**：${sessionName}\n> **开赛时间**：${timeStr} (北京时间)\n> **距离开赛**：约 ${remMin} 分钟\n\n🏁 比赛即将打响！`;
     const res = await postJson(pushKey, { msgtype: 'markdown', markdown: { content: md } });
     console.log('[企业微信响应]', res);
+  } else if (pushKey.includes('oapi.dingtalk.com')) {
+    const dingPayload = {
+      msgtype: "markdown",
+      markdown: {
+        title: title,
+        text: `### 🏎️ F1 比赛即将开赛提醒\n- **大奖赛**：${gpName}\n- **环节**：${sessionName}\n- **赛道**：${locName}\n- **开赛时间**：${timeStr} (北京时间)\n- **距离开赛**：约 ${remMin} 分钟\n\n🏁 请准备好观赛！`
+      }
+    };
+    const res = await postJson(pushKey, dingPayload);
+    console.log('[钉钉响应]', res);
   } else {
     // Pushplus
     const channel = process.env.PUSHPLUS_CHANNEL || 'wechat';
