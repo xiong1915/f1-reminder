@@ -1,0 +1,438 @@
+/* app/globals.css */
+:root {
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #121214;
+  --bg-elevated: #18181b;
+  --bg-light: #f5f5f7;
+  --bg-light-elevated: #ffffff;
+  --line-dark: rgba(255, 255, 255, 0.1);
+  --line-light: rgba(0, 0, 0, 0.08);
+
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-muted: #6e6e73;
+  --text-dark-primary: #1d1d1f;
+  --text-dark-secondary: #515154;
+
+  --accent-red: #ff2d20;
+  --accent-red-hover: #ff453a;
+  --accent-cyan: #00e5ff;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Container */
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Grid & Flex Utilities */
+.grid {
+  display: grid;
+}
+
+/* Responsive Nav */
+.nav-blur {
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: rgba(10, 10, 11, 0.85);
+  border-bottom: 1px solid var(--line-dark);
+}
+
+/* Hero Section */
+.hero-100 {
+  min-height: calc(100svh - 64px);
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Section Rhythm */
+.section-dark {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 100px 0;
+}
+
+.section-secondary {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 100px 0;
+}
+
+.section-light {
+  background-color: var(--bg-light);
+  color: var(--text-dark-primary);
+  padding: 100px 0;
+}
+
+/* Pill Badge */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.badge-red {
+  background: rgba(255, 45, 32, 0.15);
+  color: #ff453a;
+  border: 1px solid rgba(255, 45, 32, 0.3);
+}
+
+.badge-dark {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid var(--line-dark);
+}
+
+.badge-light {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-dark-secondary);
+  border: 1px solid var(--line-light);
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #000000;
+  padding: 12px 28px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid var(--line-dark);
+  padding: 12px 28px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* Cards */
+.card-dark {
+  background: var(--bg-secondary);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.card-light {
+  background: var(--bg-light-elevated);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Mobile Responsive Optimization (375px - 430px) */
+@media (max-width: 640px) {
+  .container {
+    padding: 0 16px;
+  }
+  .card-dark, .card-light {
+    padding: 20px 16px;
+  }
+  .section-dark, .section-secondary, .section-light {
+    padding: 60px 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .desktop-nav {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-nav-toggle {
+    display: none !important;
+  }
+}
+
+/* Circuit Visual System & Reduced Motion */
+.circuit-visual-container {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+}
+
+.circuit-svg-animated {
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.circuit-visual-container:hover .circuit-svg-animated {
+  transform: scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .circuit-visual-container,
+  .circuit-svg-animated,
+  .animate-fade-in {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   LIQUID GLASS DESIGN SYSTEM (Desktop Fidelity + Mobile Physical Degradation)
+   ========================================================================== */
+
+.glass-surface {
+  border-radius: 16px;
+  transition: border-color 0.25s ease, background-color 0.25s ease;
+}
+
+.glass-subtle {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-elevated {
+  background: rgba(18, 18, 20, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.glass-floating {
+  background: rgba(24, 24, 28, 0.85);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+}
+
+.glass-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: rgba(10, 10, 11, 0.82);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-composer {
+  border-radius: 28px;
+  background: rgba(20, 20, 24, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.glass-composer.is-focused {
+  border-color: rgba(255, 69, 58, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.18), 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.glass-button:active {
+  transform: scale(0.98);
+}
+
+.glass-btn-primary {
+  background: #ff3b30;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.glass-btn-primary:hover {
+  background: #e02d23;
+}
+
+.glass-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.glass-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.glass-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.glass-btn-sm {
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 10px;
+}
+
+.glass-btn-md {
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 12px;
+}
+
+.glass-btn-lg {
+  font-size: 15px;
+  padding: 14px 28px;
+  border-radius: 16px;
+}
+
+.glass-popover {
+  position: absolute;
+  z-index: 120;
+  background: rgba(22, 22, 26, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  padding: 16px;
+}
+
+.glass-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.glass-sheet-panel {
+  width: 100%;
+  max-width: 600px;
+  background: rgba(18, 18, 22, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px 24px 0 0;
+  padding: 24px;
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+
+.glass-sheet-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Mobile Physical Degradation (Viewport <= 768px 或 Reduced Transparency)
+   硬规则：手机端禁用或微量 blur，Usability > Glass Fidelity
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px), (prefers-reduced-transparency: reduce) {
+  .glass-subtle,
+  .glass-elevated,
+  .glass-floating,
+  .glass-nav,
+  .glass-composer,
+  .glass-popover,
+  .glass-sheet-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 14, 16, 0.97) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .glass-btn-secondary {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(30, 30, 34, 0.95) !important;
+  }
+}
+

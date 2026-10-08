@@ -18,6 +18,15 @@ exhaustive_*.js
 f1_2026_calendar_condensed.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
+.next/
+next-env.d.ts
+.env*.local
+.env.production
+.env.development
+*.png
+.lkg_snapshot.json
+scratch_check_*.cjs
 
-
-
+.vercel
+.env*
+*.tsbuildinfo

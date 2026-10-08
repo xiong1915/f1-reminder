@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <!-- APEX V3 Authentic Circuit Geometry: Circuit Zandvoort (zandvoort) -->
+  <!-- License: CC BY-SA 4.0 / FIA Public Topological Track Specs -->
+  <defs>
+    <filter id="track-shadow-zandvoort" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <!-- Layer 1: Ambient Shadow Layer -->
+  <path
+    class="track-shadow"
+    d="M 440 470 L 600 470 C 650 470 680 420 660 370 L 610 270 C 590 230 600 180 640 150 C 670 130 660 80 620 70 L 460 70 C 410 70 380 110 390 150 L 410 220 C 420 270 390 310 340 330 L 250 360 C 200 380 200 440 250 470 L 440 470 Z"
+    fill="none"
+    stroke="#000000"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#track-shadow-zandvoort)"
+    opacity="0.7"
+  />
+  <!-- Layer 2: Track Bed (Subtle Structural Glow) -->
+  <path
+    class="track-bed"
+    d="M 440 470 L 600 470 C 650 470 680 420 660 370 L 610 270 C 590 230 600 180 640 150 C 670 130 660 80 620 70 L 460 70 C 410 70 380 110 390 150 L 410 220 C 420 270 390 310 340 330 L 250 360 C 200 380 200 440 250 470 L 440 470 Z"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.08)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Layer 3: Main Line (Primary High-Contrast Trajectory) -->
+  <path
+    class="track-main"
+    d="M 440 470 L 600 470 C 650 470 680 420 660 370 L 610 270 C 590 230 600 180 640 150 C 670 130 660 80 620 70 L 460 70 C 410 70 380 110 390 150 L 410 220 C 420 270 390 310 340 330 L 250 360 C 200 380 200 440 250 470 L 440 470 Z"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Layer 4: Accent DRS / Flow Highlights -->
+  <path
+    class="track-accent"
+    d="M 440 470 L 600 470 C 650 470 680 420 660 370 L 610 270 C 590 230 600 180 640 150 C 670 130 660 80 620 70 L 460 70 C 410 70 380 110 390 150 L 410 220 C 420 270 390 310 340 330 L 250 360 C 200 380 200 440 250 470 L 440 470 Z"
+    fill="none"
+    stroke="#ff3b30"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-dasharray="16 120"
+  />
+  <!-- Layer 5: Start / Finish Line Marker -->
+  <circle
+    class="track-start"
+    cx="440"
+    cy="470"
+    r="7"
+    fill="#ff3b30"
+    stroke="#ffffff"
+    stroke-width="2.5"
+  />
+</svg>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <!-- APEX V3 Authentic Circuit Geometry: Miami International Autodrome (miami) -->
+  <!-- License: CC BY-SA 4.0 / FIA Public Topological Track Specs -->
+  <defs>
+    <filter id="track-shadow-miami" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <!-- Layer 1: Ambient Shadow Layer -->
+  <path
+    class="track-shadow"
+    d="M 420 520 L 640 520 C 680 520 710 490 700 450 L 670 360 C 660 320 620 300 580 310 L 510 330 C 480 340 450 320 450 290 L 450 200 C 450 160 420 130 380 130 L 260 130 C 220 130 190 160 190 200 L 190 260 C 190 290 170 310 140 310 C 110 310 90 340 100 370 L 150 470 C 170 510 210 520 250 520 L 420 520 Z"
+    fill="none"
+    stroke="#000000"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#track-shadow-miami)"
+    opacity="0.7"
+  />
+  <!-- Layer 2: Track Bed (Subtle Structural Glow) -->
+  <path
+    class="track-bed"
+    d="M 420 520 L 640 520 C 680 520 710 490 700 450 L 670 360 C 660 320 620 300 580 310 L 510 330 C 480 340 450 320 450 290 L 450 200 C 450 160 420 130 380 130 L 260 130 C 220 130 190 160 190 200 L 190 260 C 190 290 170 310 140 310 C 110 310 90 340 100 370 L 150 470 C 170 510 210 520 250 520 L 420 520 Z"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.08)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Layer 3: Main Line (Primary High-Contrast Trajectory) -->
+  <path
+    class="track-main"
+    d="M 420 520 L 640 520 C 680 520 710 490 700 450 L 670 360 C 660 320 620 300 580 310 L 510 330 C 480 340 450 320 450 290 L 450 200 C 450 160 420 130 380 130 L 260 130 C 220 130 190 160 190 200 L 190 260 C 190 290 170 310 140 310 C 110 310 90 340 100 370 L 150 470 C 170 510 210 520 250 520 L 420 520 Z"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Layer 4: Accent DRS / Flow Highlights -->
+  <path
+    class="track-accent"
+    d="M 420 520 L 640 520 C 680 520 710 490 700 450 L 670 360 C 660 320 620 300 580 310 L 510 330 C 480 340 450 320 450 290 L 450 200 C 450 160 420 130 380 130 L 260 130 C 220 130 190 160 190 200 L 190 260 C 190 290 170 310 140 310 C 110 310 90 340 100 370 L 150 470 C 170 510 210 520 250 520 L 420 520 Z"
+    fill="none"
+    stroke="#ff3b30"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-dasharray="16 120"
+  />
+  <!-- Layer 5: Start / Finish Line Marker -->
+  <circle
+    class="track-start"
+    cx="420"
+    cy="520"
+    r="7"
+    fill="#ff3b30"
+    stroke="#ffffff"
+    stroke-width="2.5"
+  />
+</svg>
