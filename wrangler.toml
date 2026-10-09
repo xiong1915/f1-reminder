@@ -3,7 +3,7 @@ main = "cf_worker.js"
 compatibility_date = "2024-09-23"
 
 [triggers]
-crons = ["* * * * *"]
+crons = ["*/1 * * * *"]
 
 [vars]
 FEISHU_APP_ID = "cli_aa4fac838bf85bb5"
