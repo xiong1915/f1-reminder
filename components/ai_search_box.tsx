@@ -9,10 +9,10 @@ import { GlassComposer } from '@/components/glass/GlassComposer';
 import { GlassButton } from '@/components/glass/GlassButton';
 
 const SUGGESTIONS = [
-  '下一站什么时候开始？',
-  '为什么安全车会缩小领先优势？',
-  '比较安东内利与拉塞尔最近几场表现',
-  '谁还可能争夺 2026 年度总冠军？'
+  '2026 赛季当前车手积分榜前五名是谁？',
+  '新加坡大奖赛正赛几点开赛？包含冲刺赛吗？',
+  '解释一下什么是 Undercut 战术以及它的成功前提',
+  '谁是上一场大奖赛的分站冠军？'
 ];
 
 export function AISearchBox({ defaultLight = false }: { defaultLight?: boolean }) {

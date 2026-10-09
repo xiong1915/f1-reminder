@@ -436,3 +436,22 @@ a {
   }
 }
 
+/* --------------------------------------------------------------------------
+   AI Console Viewport Integration (防止全局窗口滚动切除顶部导航与标题)
+   -------------------------------------------------------------------------- */
+body:has(.ai-chat-console) {
+  overflow: hidden !important;
+}
+
+body:has(.ai-chat-console) footer {
+  display: none !important;
+}
+
+.ai-chat-console {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 64px);
+  max-height: calc(100dvh - 64px);
+  overflow: hidden;
+}
+

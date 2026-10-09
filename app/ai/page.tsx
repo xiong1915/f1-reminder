@@ -44,14 +44,47 @@ export default function AIPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isComposingRef = useRef(false); // 中文输入法组合保护
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 滚动至最新内容
+  // 隐藏全局 footer，使 AI 控制台独占视口高度并防止窗口滚动切除顶部
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const footer = document.querySelector('footer');
+    if (footer) {
+      footer.style.display = 'none';
+      return () => {
+        footer.style.display = '';
+      };
+    }
+  }, []);
+
+  // 监听容器内滚动事件，判断用户是否正在上滑查看历史内容
+  const handleContainerScroll = () => {
+    if (!messagesContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+    userScrolledUpRef.current = !isNearBottom;
+  };
+
+  // 仅在消息容器内部滚动，绝不触发外部窗口全局滚动
+  const scrollToBottom = (smooth = true) => {
+    if (!messagesContainerRef.current) return;
+    if (!userScrolledUpRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
+  };
+
+  // 当产生新消息或流式内容推进时，在内部容器向下平滑跟随
+  useEffect(() => {
+    if (messages.length > 0 || streamingContent) {
+      scrollToBottom(true);
+    }
   }, [messages, streamingContent]);
 
   // 中断当前流式请求
@@ -100,6 +133,7 @@ export default function AIPage() {
 
     const nextHistory = [...messages, userMsg];
     setMessages(nextHistory);
+    userScrolledUpRef.current = false;
     setInput('');
     setStatus('submitting');
     setStreamingContent('');
@@ -254,28 +288,31 @@ export default function AIPage() {
 
   return (
     <div
-      className="section-dark"
+      className="ai-chat-console"
       style={{
-        minHeight: 'calc(100dvh - 64px)',
+        height: 'calc(100dvh - 64px)',
+        maxHeight: 'calc(100dvh - 64px)',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
-        padding: '32px 0 env(safe-area-inset-bottom, 24px)'
+        overflow: 'hidden',
+        background: 'var(--bg-primary)'
       }}
     >
-      <div className="container" style={{ maxWidth: '880px', width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--line-dark)', paddingBottom: '20px', marginBottom: '28px' }}>
+      {/* 顶部固定标题栏 (Pinned Header，绝不随滚动消失) */}
+      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--line-dark)', padding: '14px 0', background: 'rgba(10, 10, 11, 0.95)', backdropFilter: 'blur(20px)', zIndex: 10 }}>
+        <div className="container" style={{ maxWidth: '880px', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div className="badge-pill badge-red" style={{ marginBottom: '8px' }}>
-              FIA 官方数据基准 · 深度赛车策略
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span className="badge-pill badge-red" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                FIA 官方数据基准
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                深度赛车策略 · 2026 赛季
+              </span>
             </div>
-            <h1 style={{ fontSize: 'clamp(26px, 4vw, 36px)', fontWeight: 800 }}>
+            <h1 style={{ fontSize: 'clamp(20px, 3.5vw, 26px)', fontWeight: 800, margin: 0, lineHeight: 1.2 }}>
               TIKE AI 智能控制台
             </h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>
-              实时赛季事实快通道 (Fast Path) · 战术模型推演 · 全网赛事要闻溯源
-            </p>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -289,9 +326,20 @@ export default function AIPage() {
             </Link>
           </div>
         </div>
+      </div>
 
-        {/* Message Stream */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '28px' }}>
+      {/* 消息滚动区 (Scrollable Messages Stream) */}
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleContainerScroll}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '24px 0',
+          overscrollBehavior: 'contain'
+        }}
+      >
+        <div className="container" style={{ maxWidth: '880px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {messages.length === 0 && !isGenerating && (
             <div style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '20px', border: '1px dashed var(--line-dark)' }}>
               <div style={{ fontSize: '32px', marginBottom: '14px' }}>✦</div>
@@ -495,11 +543,12 @@ export default function AIPage() {
             </div>
           )}
 
-          <div ref={scrollRef} />
         </div>
+      </div>
 
-        {/* 底部功能性输入框：Liquid Glass Composer */}
-        <div style={{ position: 'sticky', bottom: '16px', zIndex: 50 }}>
+      {/* 底部固定输入框 (Pinned Bottom Composer) */}
+      <div style={{ flexShrink: 0, padding: '12px 0 env(safe-area-inset-bottom, 16px)', background: 'rgba(10, 10, 11, 0.95)', borderTop: '1px solid var(--line-dark)', zIndex: 10 }}>
+        <div className="container" style={{ maxWidth: '880px', width: '100%' }}>
           <GlassComposer isFocused={isFocused} style={{ padding: '8px 12px 8px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <textarea

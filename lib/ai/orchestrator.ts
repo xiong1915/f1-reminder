@@ -106,12 +106,15 @@ export class AIOrchestrator {
     let contextText = `【TIKE F1 权威 2026 赛季事实基准】
 - 当前基准时间：${bjTime} (UTC+8)
 - 当前进行/下一站：第 ${curr.round} 站 ${curr.nameZh || curr.name} (${curr.locality} · ${curr.circuitName})
+  周末性质：${curr.isSprintWeekend ? '包含冲刺赛 (Sprint Weekend)' : '常规大奖赛周末'}
   正赛时间：${formatBeijingDisplay(curr.raceStartUTC)} (北京时间)
   下一节动态：${nextS.session?.name || 'Grand Prix'} (${nextS.status === 'IN_PROGRESS' ? '正在进行中' : (nextS.session?.startTimeUTC ? formatBeijingDisplay(nextS.session.startTimeUTC) : '待定')})
-- 当前车手积分榜前三：
-  1. ${top3[0]?.name || '榜首车手'} (${top3[0]?.team || '车队'}) - ${top3[0]?.points || 0} 分
-  2. ${top3[1]?.name || '第二名'} (${top3[1]?.team || '车队'}) - ${top3[1]?.points || 0} 分 (差 ${Math.abs(top3[1]?.gap || 0)} 分)
-  3. ${top3[2]?.name || '第三名'} (${top3[2]?.team || '车队'}) - ${top3[2]?.points || 0} 分`;
+  本站完整赛程时间表：
+${curr.sessions?.map((s: any) => `  * ${s.name}: ${formatBeijingDisplay(s.startTimeUTC)} (北京时间)`).join('\n') || '  * 详见赛程中心'}
+- 当前车手积分榜前 10 名 (2026 官方核定)：
+${overview.driverStandings.slice(0, 10).map((d: any) => `  ${d.rank}. ${d.name} (${d.team}) - ${d.points} 分 (差 ${d.gap === 0 ? '领跑' : Math.abs(d.gap) + ' 分'}, ${d.wins || 0} 胜)`).join('\n')}
+- 当前车队积分榜前 5 名：
+${overview.constructorStandings.slice(0, 5).map((t: any) => `  ${t.rank}. ${t.name} - ${t.points} 分 (差 ${t.gap === 0 ? '领跑' : Math.abs(t.gap) + ' 分'}, ${t.wins || 0} 胜)`).join('\n')}`;
 
     if (matchedMeeting && matchedMeeting.round !== curr.round) {
       contextText += `\n\n【用户询问的目标分站权威赛程】
@@ -119,7 +122,7 @@ export class AIOrchestrator {
   正赛时间：${formatBeijingDisplay(matchedMeeting.raceStartUTC)} (北京时间)
   周末类型：${matchedMeeting.isSprintWeekend ? '包含冲刺赛 (Sprint Weekend)' : '常规比赛周末'}
   各节详细时间：
-${matchedMeeting.sessions.map(s => `  * ${s.name}: ${formatBeijingDisplay(s.startTimeUTC)}`).join('\n')}`;
+${matchedMeeting.sessions.map((s: any) => `  * ${s.name}: ${formatBeijingDisplay(s.startTimeUTC)} (北京时间)`).join('\n')}`;
     }
 
     if (mentionedDrivers.length > 0) {
@@ -174,25 +177,29 @@ ${contextText}
 
     const qLower = query.toLowerCase();
 
-    // 优先匹配具体提及的目标分站
-    if (calendar && calendar.length > 0) {
-      const matched = calendar.find(m => {
-        return (m.nameZh && qLower.includes(m.nameZh.toLowerCase())) ||
-          (m.name && qLower.includes(m.name.toLowerCase().replace(' grand prix', ''))) ||
-          (m.locality && qLower.includes(m.locality.toLowerCase()));
-      });
-      if (matched && matched.round !== curr.round) {
-        return {
-          type: 'next_race',
-          title: `第 ${matched.round} 站 ${matched.nameZh || matched.name}`,
-          badge: matched.locality,
-          fields: [
-            { label: '举办赛道', value: matched.circuitName },
-            { label: '正赛时间', value: `${formatBeijingDisplay(matched.raceStartUTC)} (北京时间)` },
-            { label: '周末类型', value: matched.isSprintWeekend ? '冲刺周末 (含冲刺赛)' : '常规周末' }
-          ]
-        };
-      }
+    // 优先匹配具体提及的目标分站或下一场分站
+    const matchedMeeting = (calendar && calendar.length > 0)
+      ? calendar.find(m => {
+          return (m.nameZh && qLower.includes(m.nameZh.toLowerCase())) ||
+            (m.name && qLower.includes(m.name.toLowerCase().replace(' grand prix', ''))) ||
+            (m.locality && qLower.includes(m.locality.toLowerCase()));
+        })
+      : null;
+
+    const targetMeeting = matchedMeeting || (/下一[场站]|几点|什么时候|赛程|开赛|正赛/i.test(query) ? curr : null);
+
+    if (targetMeeting) {
+      return {
+        type: 'next_race',
+        title: `第 ${targetMeeting.round} 站 ${targetMeeting.nameZh || targetMeeting.name}`,
+        badge: targetMeeting.locality,
+        fields: [
+          { label: '举办赛道', value: targetMeeting.circuitName },
+          { label: '正赛时间', value: `${formatBeijingDisplay(targetMeeting.raceStartUTC)} (北京时间)` },
+          { label: '周末类型', value: targetMeeting.isSprintWeekend ? '冲刺周末 (包含周六冲刺赛)' : '常规比赛周末' },
+          { label: '当前下一节', value: `${nextS.session?.name || 'Grand Prix'} (${nextS.status === 'IN_PROGRESS' ? '进行中' : formatBeijingDisplay(nextS.session?.startTimeUTC || '')})` }
+        ]
+      };
     }
 
     // 匹配具体提及的车手
@@ -217,25 +224,16 @@ ${contextText}
       }
     }
 
-    if (/下一[场站]|几点|什么时候|赛程|开赛/i.test(query)) {
-      return {
-        type: 'next_race',
-        title: `第 ${curr.round} 站 ${curr.nameZh || curr.name}`,
-        badge: curr.locality,
-        fields: [
-          { label: '举办赛道', value: curr.circuitName },
-          { label: '正赛时间', value: `${formatBeijingDisplay(curr.raceStartUTC)} (北京时间)` },
-          { label: '当前下一节', value: `${nextS.session?.name || '正赛'} (${nextS.status === 'IN_PROGRESS' ? '进行中' : formatBeijingDisplay(nextS.session?.startTimeUTC || '')})` }
-        ]
-      };
-    }
-
-    if (/积分|榜首|排名/i.test(query)) {
+    if (/积分|榜首|排名|车手榜/i.test(query)) {
+      const isTop3 = /前三|前3|3名/i.test(query);
+      const isTop10 = /前十|前10|10名/i.test(query);
+      const count = isTop3 ? 3 : (isTop10 ? 10 : 5);
+      const list = overview.driverStandings.slice(0, count);
       return {
         type: 'standings',
-        title: '2026 赛季车手积分榜前三',
+        title: `2026 赛季车手积分榜前${count === 3 ? '三' : count === 5 ? '五' : '十'}`,
         badge: 'FIA 官方核定',
-        fields: top3.map((d: any) => ({
+        fields: list.map((d: any) => ({
           label: `P${d.rank} ${d.name}`,
           value: `${d.team} · ${d.points} 分 (差 ${d.gap === 0 ? '领跑' : Math.abs(d.gap) + ' 分'})`
         }))
@@ -295,15 +293,18 @@ ${contextText}
     }
 
     if (intent === 'F1_FACTUAL') {
-      if (/下一[场站]|几点|什么时候/i.test(query)) {
-        return `【下一场 F1 比赛信息】\n分站：第 ${curr.round} 站 ${curr.nameZh || curr.name} (${curr.locality} · ${curr.circuitName})\n正赛时间：${formatBeijingDisplay(curr.raceStartUTC)} (北京时间)\n当前下一节：${nextS.session?.name || 'Grand Prix'} (${nextS.status === 'IN_PROGRESS' ? '进行中' : formatBeijingDisplay(nextS.session?.startTimeUTC || '')})`;
+      if (/下一[场站]|几点|什么时候|赛程|开赛|正赛/i.test(query)) {
+        return `【下一场 F1 比赛信息】\n分站：第 ${curr.round} 站 ${curr.nameZh || curr.name} (${curr.locality} · ${curr.circuitName})\n举办赛道：${curr.circuitName}\n正赛时间：${formatBeijingDisplay(curr.raceStartUTC)} (北京时间)\n周末类型：${curr.isSprintWeekend ? '包含冲刺赛 (Sprint Weekend)' : '常规比赛周末'}\n当前下一节：${nextS.session?.name || 'Grand Prix'} (${nextS.status === 'IN_PROGRESS' ? '进行中' : formatBeijingDisplay(nextS.session?.startTimeUTC || '')})`;
       }
-      if (/积分|榜首|排名/i.test(query)) {
-        const topList = top3.map((d: any) => `${d.rank}. ${d.name} (${d.team}) - ${d.points} 分`).join('\n');
-        return `【当前 2026 赛季车手积分榜前三】\n${topList}`;
+      if (/积分|榜首|排名|车手榜/i.test(query)) {
+        const isTop3 = /前三|前3|3名/i.test(query);
+        const count = isTop3 ? 3 : 5;
+        const list = overview.driverStandings.slice(0, count);
+        const topList = list.map((d: any) => `${d.rank}. ${d.name} (${d.team}) - ${d.points} 分 (差 ${d.gap === 0 ? '领跑' : Math.abs(d.gap) + ' 分'})`).join('\n');
+        return `【当前 2026 赛季车手积分榜前${count === 3 ? '三' : '五'}】\n${topList}`;
       }
       if (/上[一站场]|冠军/i.test(query) && lastR) {
-        return `【上一站比赛结果】\n第 ${lastR.round} 站 ${lastR.name} (${lastR.locality})\n冠军车手：${lastR.winner.name} (${lastR.winner.team})\n用时：${lastR.winner.time || '完赛'}`;
+        return `【上一站比赛结果】\n第 ${lastR.round} 站 ${lastR.name} (${lastR.locality})\n分站冠军：${lastR.winner.name} (${lastR.winner.team})\n成绩用时：${lastR.winner.time || '完赛'}`;
       }
     }
 
