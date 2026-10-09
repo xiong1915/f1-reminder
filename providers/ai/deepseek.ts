@@ -34,7 +34,7 @@ export class DeepSeekProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
-    if (!this.apiKey) {
+    if (!this.apiKey || this.apiKey === 'YOUR_DEEPSEEK_API_KEY') {
       throw new Error('[DeepSeekProvider] DEEPSEEK_API_KEY is not configured on server.');
     }
 
@@ -82,7 +82,7 @@ export class DeepSeekProvider implements AIProvider {
   }
 
   async *stream(request: AIRequest): AsyncIterable<AIStreamEvent> {
-    if (!this.apiKey) {
+    if (!this.apiKey || this.apiKey === 'YOUR_DEEPSEEK_API_KEY') {
       yield { type: 'error', error: 'DEEPSEEK_API_KEY 未在服务端配置' };
       return;
     }

@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AIMessage, AISource, AIFactCard } from '@/lib/ai/types';
 import { GlassComposer, GlassButton } from '@/components/glass';
+import { MarkdownRenderer } from '@/components/markdown_renderer';
 
 export type AIStatus =
   | 'idle'
@@ -375,12 +376,15 @@ export default function AIPage() {
                     border: m.role === 'user' ? 'none' : '1px solid var(--line-dark)',
                     lineHeight: 1.65,
                     fontSize: '15px',
-                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     boxShadow: m.role === 'user' ? '0 4px 16px rgba(255,45,32,0.3)' : '0 4px 16px rgba(0,0,0,0.3)'
                   }}
                 >
-                  {m.content}
+                  {m.role === 'user' ? (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  ) : (
+                    <MarkdownRenderer content={m.content} />
+                  )}
                 </div>
               )}
 
@@ -444,11 +448,12 @@ export default function AIPage() {
                   border: '1px solid var(--line-dark)',
                   lineHeight: 1.65,
                   fontSize: '15px',
-                  whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word'
                 }}
               >
-                {streamingContent || (
+                {streamingContent ? (
+                  <MarkdownRenderer content={streamingContent} />
+                ) : (
                   <span style={{ color: 'var(--text-muted)' }}>
                     正在检索 2026 赛季事实基准并组织推演分析...
                   </span>

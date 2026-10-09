@@ -67,12 +67,41 @@ export class AIOrchestrator {
       };
     }
 
-    // 获取权威 2026 F1 核心数据
-    const overview = await defaultF1Service.getOverview();
+    // 获取权威 2026 F1 核心数据与全赛季赛历
+    const [overview, calendar] = await Promise.all([
+      defaultF1Service.getOverview(),
+      defaultF1Service.getCalendar('2026').catch(() => [])
+    ]);
     const curr = overview.currentMeeting;
     const nextS = overview.nextSession;
     const top3 = overview.driverStandings.slice(0, 3);
     const lastR = overview.previousRace;
+
+    const qLower = query.toLowerCase();
+
+    // 智能检索用户是否询问特定分站
+    const matchedMeeting = calendar.find(m => {
+      return (m.nameZh && qLower.includes(m.nameZh.toLowerCase())) ||
+        (m.name && qLower.includes(m.name.toLowerCase().replace(' grand prix', ''))) ||
+        (m.locality && qLower.includes(m.locality.toLowerCase())) ||
+        (m.country && qLower.includes(m.country.toLowerCase())) ||
+        (m.circuitName && qLower.includes(m.circuitName.toLowerCase()));
+    });
+
+    // 智能检索用户是否询问特定车手
+    const mentionedDrivers = overview.driverStandings.filter(d => {
+      return (d.name && qLower.includes(d.name.toLowerCase())) ||
+        (d.nameEn && qLower.includes(d.nameEn.toLowerCase())) ||
+        (d.code && query.toUpperCase().includes(d.code)) ||
+        (d.driverId && qLower.includes(d.driverId.toLowerCase()));
+    });
+
+    // 智能检索用户是否询问特定车队
+    const mentionedTeams = overview.constructorStandings.filter(t => {
+      return (t.name && qLower.includes(t.name.toLowerCase())) ||
+        (t.nameEn && qLower.includes(t.nameEn.toLowerCase())) ||
+        (t.teamId && qLower.includes(t.teamId.toLowerCase()));
+    });
 
     let contextText = `【TIKE F1 权威 2026 赛季事实基准】
 - 当前基准时间：${bjTime} (UTC+8)
@@ -83,6 +112,25 @@ export class AIOrchestrator {
   1. ${top3[0]?.name || '榜首车手'} (${top3[0]?.team || '车队'}) - ${top3[0]?.points || 0} 分
   2. ${top3[1]?.name || '第二名'} (${top3[1]?.team || '车队'}) - ${top3[1]?.points || 0} 分 (差 ${Math.abs(top3[1]?.gap || 0)} 分)
   3. ${top3[2]?.name || '第三名'} (${top3[2]?.team || '车队'}) - ${top3[2]?.points || 0} 分`;
+
+    if (matchedMeeting && matchedMeeting.round !== curr.round) {
+      contextText += `\n\n【用户询问的目标分站权威赛程】
+- 第 ${matchedMeeting.round} 站 ${matchedMeeting.nameZh || matchedMeeting.name} (${matchedMeeting.locality} · ${matchedMeeting.circuitName})
+  正赛时间：${formatBeijingDisplay(matchedMeeting.raceStartUTC)} (北京时间)
+  周末类型：${matchedMeeting.isSprintWeekend ? '包含冲刺赛 (Sprint Weekend)' : '常规比赛周末'}
+  各节详细时间：
+${matchedMeeting.sessions.map(s => `  * ${s.name}: ${formatBeijingDisplay(s.startTimeUTC)}`).join('\n')}`;
+    }
+
+    if (mentionedDrivers.length > 0) {
+      contextText += `\n\n【用户提及车手的当前战绩与积分】\n` +
+        mentionedDrivers.map(d => `* P${d.rank} ${d.name} (${d.team})：${d.points} 分，分站胜场：${d.wins || 0}，落后领跑者：${Math.abs(d.gap)} 分`).join('\n');
+    }
+
+    if (mentionedTeams.length > 0) {
+      contextText += `\n\n【用户提及车队的积分榜情况】\n` +
+        mentionedTeams.map(t => `* P${t.rank} ${t.name}：${t.points} 分，胜场：${t.wins || 0}，分差：${Math.abs(t.gap)} 分`).join('\n');
+    }
 
     sources.push({ name: 'TIKE F1 权威数据引擎' });
 
@@ -117,12 +165,57 @@ ${contextText}
   /**
    * 结构化事实快通道 (F1 Fact Fast Path)：由 Canonical F1 Core 数据层即时直出结构化卡片
    */
-  getFactCard(intent: UserIntent, query: string, overview: any): AIFactCard | null {
+  getFactCard(intent: UserIntent, query: string, overview: any, calendar?: any[]): AIFactCard | null {
     if (intent !== 'F1_FACTUAL') return null;
     const curr = overview.currentMeeting;
     const nextS = overview.nextSession;
     const top3 = overview.driverStandings.slice(0, 3);
     const lastR = overview.previousRace;
+
+    const qLower = query.toLowerCase();
+
+    // 优先匹配具体提及的目标分站
+    if (calendar && calendar.length > 0) {
+      const matched = calendar.find(m => {
+        return (m.nameZh && qLower.includes(m.nameZh.toLowerCase())) ||
+          (m.name && qLower.includes(m.name.toLowerCase().replace(' grand prix', ''))) ||
+          (m.locality && qLower.includes(m.locality.toLowerCase()));
+      });
+      if (matched && matched.round !== curr.round) {
+        return {
+          type: 'next_race',
+          title: `第 ${matched.round} 站 ${matched.nameZh || matched.name}`,
+          badge: matched.locality,
+          fields: [
+            { label: '举办赛道', value: matched.circuitName },
+            { label: '正赛时间', value: `${formatBeijingDisplay(matched.raceStartUTC)} (北京时间)` },
+            { label: '周末类型', value: matched.isSprintWeekend ? '冲刺周末 (含冲刺赛)' : '常规周末' }
+          ]
+        };
+      }
+    }
+
+    // 匹配具体提及的车手
+    if (overview.driverStandings && overview.driverStandings.length > 0) {
+      const matchedDriver = overview.driverStandings.find((d: any) =>
+        (d.name && qLower.includes(d.name.toLowerCase())) ||
+        (d.nameEn && qLower.includes(d.nameEn.toLowerCase())) ||
+        (d.code && query.toUpperCase().includes(d.code))
+      );
+      if (matchedDriver && /积分|排名|第几|成绩|多少分/i.test(query)) {
+        return {
+          type: 'standings',
+          title: `车手战况：${matchedDriver.name}`,
+          badge: `P${matchedDriver.rank}`,
+          fields: [
+            { label: '所属车队', value: matchedDriver.team },
+            { label: '赛季积分', value: `${matchedDriver.points} 分` },
+            { label: '分站胜场', value: `${matchedDriver.wins || 0} 胜` },
+            { label: '领跑差距', value: matchedDriver.gap === 0 ? '领跑积分榜' : `落后 ${Math.abs(matchedDriver.gap)} 分` }
+          ]
+        };
+      }
+    }
 
     if (/下一[场站]|几点|什么时候|赛程|开赛/i.test(query)) {
       return {
@@ -168,11 +261,38 @@ ${contextText}
   /**
    * 离线确定性兜底回复 (当模型服务暂未配置 Key 或网络完全不可用时)
    */
-  getDeterministicResponse(intent: UserIntent, query: string, overview: any): string {
+  getDeterministicResponse(intent: UserIntent, query: string, overview: any, calendar?: any[]): string {
     const curr = overview.currentMeeting;
     const nextS = overview.nextSession;
     const top3 = overview.driverStandings.slice(0, 3);
     const lastR = overview.previousRace;
+
+    const qLower = query.toLowerCase();
+
+    // 优先为提及的特定分站返回确定性赛程
+    if (calendar && calendar.length > 0) {
+      const matched = calendar.find(m => {
+        return (m.nameZh && qLower.includes(m.nameZh.toLowerCase())) ||
+          (m.name && qLower.includes(m.name.toLowerCase().replace(' grand prix', ''))) ||
+          (m.locality && qLower.includes(m.locality.toLowerCase()));
+      });
+      if (matched && matched.round !== curr.round) {
+        return `【第 ${matched.round} 站 ${matched.nameZh || matched.name} 赛程信息】\n举办地：${matched.locality} · ${matched.circuitName}\n正赛时间：${formatBeijingDisplay(matched.raceStartUTC)} (北京时间)\n周末类型：${matched.isSprintWeekend ? '包含冲刺赛' : '常规大奖赛'}\n各环节时间：\n` +
+          matched.sessions.map((s: any) => `  * ${s.name}: ${formatBeijingDisplay(s.startTimeUTC)}`).join('\n');
+      }
+    }
+
+    // 优先为提及的具体车手返回确定性战况
+    if (overview.driverStandings && overview.driverStandings.length > 0) {
+      const matchedDriver = overview.driverStandings.find((d: any) =>
+        (d.name && qLower.includes(d.name.toLowerCase())) ||
+        (d.nameEn && qLower.includes(d.nameEn.toLowerCase())) ||
+        (d.code && query.toUpperCase().includes(d.code))
+      );
+      if (matchedDriver && /积分|排名|第几|成绩|多少分/i.test(query)) {
+        return `【车手战报】\n姓名：${matchedDriver.name} (${matchedDriver.nameEn})\n车队：${matchedDriver.team}\n当前排名：P${matchedDriver.rank}\n积分：${matchedDriver.points} 分 (落后榜首 ${Math.abs(matchedDriver.gap)} 分)\n胜场：${matchedDriver.wins || 0}`;
+      }
+    }
 
     if (intent === 'F1_FACTUAL') {
       if (/下一[场站]|几点|什么时候/i.test(query)) {
@@ -221,9 +341,12 @@ ${contextText}
         return { reply: '', sources: [] };
       }
       console.warn(`[AIOrchestrator] Model generation fallback: ${err.message}`);
-      const overview = await defaultF1Service.getOverview();
+      const [overview, calendar] = await Promise.all([
+        defaultF1Service.getOverview(),
+        defaultF1Service.getCalendar('2026').catch(() => [])
+      ]);
       return {
-        reply: this.getDeterministicResponse(intent, query, overview),
+        reply: this.getDeterministicResponse(intent, query, overview, calendar),
         sources
       };
     }
@@ -247,8 +370,11 @@ ${contextText}
     let factCardYielded = false;
     if (intent === 'F1_FACTUAL') {
       try {
-        const overview = await defaultF1Service.getOverview();
-        const factCard = this.getFactCard(intent, query, overview);
+        const [overview, calendar] = await Promise.all([
+          defaultF1Service.getOverview(),
+          defaultF1Service.getCalendar('2026').catch(() => [])
+        ]);
+        const factCard = this.getFactCard(intent, query, overview, calendar);
         if (factCard) {
           yield { type: 'fact_card', factCard };
           factCardYielded = true;
@@ -280,8 +406,11 @@ ${contextText}
         return;
       }
       console.warn(`[AIOrchestrator] Stream fallback: ${err.message}`);
-      const overview = await defaultF1Service.getOverview();
-      const text = this.getDeterministicResponse(intent, query, overview);
+      const [overview, calendar] = await Promise.all([
+        defaultF1Service.getOverview(),
+        defaultF1Service.getCalendar('2026').catch(() => [])
+      ]);
+      const text = this.getDeterministicResponse(intent, query, overview, calendar);
       if (!factCardYielded) {
         yield { type: 'delta', content: text };
       } else {
