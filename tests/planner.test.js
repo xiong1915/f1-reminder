@@ -23,7 +23,7 @@ test('Planner: 8 天规划窗口成功覆盖跨周日晚间赛事', () => {
   assert.strictEqual(plan.sessions[0].session_key, 'next_sunday_race_test');
 });
 
-test('Planner: 每场比赛生成主备双 cron (提前 30m 与提前 15m)', () => {
+test('Planner: 每场比赛生成主备双 cron (提前 35m 与提前 30m)', () => {
   const mockNow = Date.parse('2026-10-11T04:07:00.000Z');
   const raceStartMs = Date.parse('2026-10-13T14:00:00.000Z');
   const mockSessions = [
@@ -37,13 +37,13 @@ test('Planner: 每场比赛生成主备双 cron (提前 30m 与提前 15m)', () 
 
   const plan = buildPlan(mockSessions, mockNow);
   const session = plan.sessions[0];
-  assert.strictEqual(session.reminder_cron, '30 13 13 10 *', '主 cron 应为开赛前 30 分钟 (13:30 UTC)');
-  assert.strictEqual(session.backup_cron, '45 13 13 10 *', '备用 cron 应为开赛前 15 分钟 (13:45 UTC)');
+  assert.strictEqual(session.reminder_cron, '25 13 13 10 *', '主 cron 应为开赛前 35 分钟 (13:25 UTC)');
+  assert.strictEqual(session.backup_cron, '30 13 13 10 *', '备用 cron 应为开赛前 30 分钟 (13:30 UTC)');
 
   const template = 'name: Test\non:\n__SCHEDULE__\njobs: {}';
   const workflow = renderWorkflow(template, plan);
-  assert.strictEqual(workflow.includes("- cron: '30 13 13 10 *'"), true, 'workflow 必须包含主 cron');
-  assert.strictEqual(workflow.includes("- cron: '45 13 13 10 *'"), true, 'workflow 必须包含备用 cron');
+  assert.strictEqual(workflow.includes("- cron: '25 13 13 10 *'"), true, 'workflow 必须包含主 cron');
+  assert.strictEqual(workflow.includes("- cron: '30 13 13 10 *'"), true, 'workflow 必须包含备用 cron');
 });
 
 test('Planner: 即将开赛但未超时的场次标记为 catch-up 且 reminder_cron 为 null', () => {
@@ -63,7 +63,7 @@ test('Planner: 即将开赛但未超时的场次标记为 catch-up 且 reminder_
   const catchupSession = plan.sessions[0];
   assert.strictEqual(catchupSession.is_catchup, true, '必须标记为 is_catchup');
   assert.strictEqual(catchupSession.reminder_cron, null, '已过时的主提醒 cron 为 null');
-  assert.strictEqual(catchupSession.backup_cron, '15 4 11 10 *', '未来的备用 cron 仍正常保留为 04:15');
+  assert.strictEqual(catchupSession.backup_cron, null, '已过时的备用提醒 cron 为 null');
 
   // 若距离开赛仅剩 10 分钟（主备时间均已过）
   const imminentSessions = [

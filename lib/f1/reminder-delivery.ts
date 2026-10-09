@@ -7,7 +7,7 @@ export interface DeliveryStore {
 
 export function reminderDue(start: string, now: number): boolean {
   const remaining = Date.parse(start) - now;
-  return Number.isFinite(remaining) && remaining > 0 && remaining <= 30 * 60000;
+  return Number.isFinite(remaining) && remaining > 0 && remaining <= 35 * 60000;
 }
 
 // A timeout cannot prove whether the receiver accepted the message.

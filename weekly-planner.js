@@ -21,8 +21,8 @@ function buildPlan(sessions, now = Date.now()) {
     // 已开赛或超出本周规划窗口则跳过
     if (start <= now || start >= until) continue;
 
-    const remindMain = start - 30 * 60000;
-    const remindBackup = start - 15 * 60000;
+    const remindMain = start - 35 * 60000;
+    const remindBackup = start - 30 * 60000;
     let isCatchUp = false;
     let reminderCron = null;
     let backupCron = null;

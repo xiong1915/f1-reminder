@@ -12,11 +12,11 @@ function memoryStore() {
   };
   return { states, store };
 }
-test('30-minute boundary, delayed catch-up, no early or post-start reminder', () => {
+test('35-minute boundary, delayed catch-up, no early or post-start reminder', () => {
   const start = '2026-10-10T09:00:00Z';
   const t = Date.parse(start);
-  assert.equal(reminderDue(start, t - 30 * 60000 - 1), false);
-  assert.equal(reminderDue(start, t - 30 * 60000), true);
+  assert.equal(reminderDue(start, t - 35 * 60000 - 1), false);
+  assert.equal(reminderDue(start, t - 35 * 60000), true);
   assert.equal(reminderDue(start, t - 29 * 60000), true);
   assert.equal(reminderDue(start, t), false);
   assert.equal(reminderDue('invalid', t), false);

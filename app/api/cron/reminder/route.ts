@@ -18,8 +18,8 @@ function authorized(req: NextRequest) {
 }
 function store(redis: Redis): DeliveryStore {
   return {
-    async claim(key) { return await redis.set(key, {status:'pending', attemptedAt:new Date().toISOString()}, {nx:true,ex:TTL}) === 'OK'; },
-    async finish(key,status) { await redis.set(key,{status,updatedAt:new Date().toISOString()},{ex:TTL}); },
+    async claim(key) { return await redis.set(key, {status:'pending', attemptedAt:new Date().toISOString()}, {nx:true,ex:120}) === 'OK'; },
+    async finish(key,status) { await redis.set(key,{status,updatedAt:new Date().toISOString()},{ex:status==='sent'?TTL:60}); },
     async release(key) { await redis.del(key); },
     async readStatus(key) { return (await redis.get<{status:string}>(key))?.status || null; }
   };
@@ -49,10 +49,10 @@ export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({error:'Unauthorized'},{status:401});
   try {
     const body = await req.json(), start = Date.parse(body.startTimeUTC);
-    if (body.action !== 'schedule_test' || !Number.isFinite(start) || start<Date.now()+32*60000 || start>Date.now()+120*60000) return NextResponse.json({error:'Test start must be 32–120 minutes in the future'},{status:400});
+    if (body.action !== 'schedule_test' || !Number.isFinite(start) || start<Date.now()+37*60000 || start>Date.now()+120*60000) return NextResponse.json({error:'Test start must be 37–120 minutes in the future'},{status:400});
     const redis=client(), test:TestSession={id:crypto.randomUUID(),startTimeUTC:new Date(start).toISOString(),createdAt:new Date().toISOString()};
     if (!await redis.set(TEST_KEY,test,{nx:true,ex:3*3600})) return NextResponse.json({error:'Test already scheduled'},{status:409});
-    return NextResponse.json({test,dueAt:new Date(start-30*60000).toISOString()});
+    return NextResponse.json({test,dueAt:new Date(start-35*60000).toISOString()});
   } catch { return NextResponse.json({error:'Unable to schedule test'},{status:503}); }
 }
 export async function GET(req: NextRequest) {
