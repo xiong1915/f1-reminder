@@ -49,7 +49,7 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
-      fetch('https://f1.tike69.cc.cd/api/cron/reminder', {
+      fetch(new URL('/api/cron/reminder', UPSTREAM_ORIGIN), {
         headers: {
           'User-Agent': 'Cloudflare-Worker-Edge-Cron/1.0',
           'Authorization': `Bearer ${env.CRON_SECRET || ''}`,
