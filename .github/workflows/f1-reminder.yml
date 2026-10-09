@@ -46,11 +46,20 @@ jobs:
         env:
           WEEKLY_PLAN: 'true'
           SCHEDULE_CRON: ${{ github.event.schedule || '' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
           TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: |
-          node reminder.js
+          if [ "${TEST_MODE:-false}" = "true" ]; then
+            node reminder.js
+          else
+            test -n "$CRON_SECRET" || { echo "::error::CRON_SECRET is missing"; exit 1; }
+            curl --fail-with-body --max-time 30 --retry 0 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "X-Reminder-Source: github" \
+              https://f1.tike69.cc.cd/api/cron/reminder
+          fi
 
       - name: Save sent history to repository
         # 即使前序推送报错，也要保存已成功推送的记录与本地拉取的赛程缓存，避免丢失与重复

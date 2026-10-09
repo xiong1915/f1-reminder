@@ -1,7 +1,7 @@
 // tests/planner.test.js - 赛程规划、窗口跨度与双 cron 调度测试
 const test = require('node:test');
 const assert = require('node:assert');
-const { cronAt, buildPlan, renderWorkflow } = require('../weekly-planner');
+const { cronAt, buildPlan, renderWorkflow, jolpicaSessions } = require('../weekly-planner');
 
 test('Planner: 8 天规划窗口成功覆盖跨周日晚间赛事', () => {
   const DAY = 86400000;
@@ -79,12 +79,28 @@ test('Planner: 即将开赛但未超时的场次标记为 catch-up 且 reminder_
   assert.strictEqual(imminentPlan.sessions[0].backup_cron, null);
 });
 
-test('Planner: 无比赛周生成空计划且工作流无 cron', () => {
+test('Planner: 无比赛周保留云端健康检查，不产生赛事提醒', () => {
   const mockNow = Date.parse('2026-10-11T04:07:00.000Z');
   const plan = buildPlan([], mockNow);
   assert.strictEqual(plan.sessions.length, 0);
 
   const template = 'name: Test\non:\n__SCHEDULE__\njobs: {}';
   const workflow = renderWorkflow(template, plan);
-  assert.strictEqual(workflow.includes('cron:'), false, '无比赛周绝不生成任何 cron 任务');
+  assert.strictEqual(workflow.includes("cron: '*/15 * * * 5,6,0'"), true, '无比赛周仍检查数据与定时器健康');
+});
+
+test('Jolpica: sprint qualifying, UTC conversion and missing times', () => {
+  const sessions = jolpicaSessions([{round:'17',date:'2026-10-11',time:'12:00:00Z',
+    FirstPractice:{date:'2026-10-09'},SprintQualifying:{date:'2026-10-09',time:'12:30:00Z'},
+    Circuit:{Location:{country:'Singapore',locality:'Marina Bay'}}}],2026);
+  assert.deepEqual(sessions.map(s=>s.session_name),['Sprint Qualifying','Race']);
+  assert.equal(sessions[0].date_start,'2026-10-09T12:30:00.000Z');
+});
+
+test('Planner excludes cancelled and expired sessions, rejects invalid dates', () => {
+  const now=Date.parse('2026-12-31T23:00:00Z');
+  const base={session_type:'Race',session_name:'Race'};
+  assert.equal(buildPlan([{...base,date_start:'2027-01-01T01:00:00Z',is_cancelled:true},{...base,date_start:'2026-12-30T01:00:00Z'}],now).sessions.length,0);
+  assert.equal(buildPlan([{...base,date_start:'2027-01-01T01:00:00Z'}],now).sessions.length,1);
+  assert.throws(()=>buildPlan([{...base,date_start:'invalid'}],now));
 });

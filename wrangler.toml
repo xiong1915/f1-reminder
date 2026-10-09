@@ -1,0 +1,15 @@
+name = "feishu-f1-bot"
+main = "cf_worker.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+FEISHU_APP_ID = "cli_aa4fac838bf85bb5"
+DEEPSEEK_MODEL = "deepseek-chat"
+# 敏感凭据（FEISHU_APP_SECRET, DEEPSEEK_API_KEY, TAVILY_API_KEY）请使用 `wrangler secret put <KEY>` 或 Cloudflare 网页后台安全注入
+
+[[kv_namespaces]]
+binding = "KV_CHAT"
+id = "641a2f93e854463e88a6c07ec013a842"

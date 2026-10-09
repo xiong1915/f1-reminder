@@ -72,10 +72,19 @@ jobs:
         env:
           WEEKLY_PLAN: 'true'
           SCHEDULE_CRON: ''
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
         run: |
-          node reminder.js
+          if [ "${TEST_MODE:-false}" = "true" ]; then
+            node reminder.js
+          else
+            test -n "$CRON_SECRET" || { echo "::error::CRON_SECRET is missing"; exit 1; }
+            curl --fail-with-body --max-time 30 --retry 0 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "X-Reminder-Source: github" \
+              https://f1.tike69.cc.cd/api/cron/reminder
+          fi
       - name: Save updated history
         if: always()
         run: |

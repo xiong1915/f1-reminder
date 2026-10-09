@@ -235,8 +235,8 @@ export const CIRCUIT_SPECS: Record<string, { lengthKm: string; laps: number; lap
   'shanghai': { lengthKm: '5.451', laps: 56, lapRecord: '1:32.238', turns: '16 (9右 / 7左)' }
 };
 
-function makeIso(date?: string, time: string = '12:00:00Z'): string {
-  if (!date) return '';
+function makeIso(date?: string, time?: string): string {
+  if (!date || !time) return '';
   const cleanTime = time.endsWith('Z') ? time : `${time}Z`;
   return `${date}T${cleanTime}`;
 }

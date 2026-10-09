@@ -57,19 +57,24 @@ function renderWorkflow(template, plan) {
     if (s.backup_cron) allCrons.push(s.backup_cron);
   }
   const crons = [...new Set(allCrons)];
-  const schedule = crons.length ? '  schedule:\n' + crons.map(cron => "    - cron: '" + cron + "'").join('\n') : '';
+  // The health-check cadence must survive weekly regeneration, including empty weeks.
+  const schedule = '  schedule:\n' + [...new Set(['*/15 * * * 5,6,0', '0 * * * 1-4', ...crons])].map(cron => "    - cron: '" + cron + "'").join('\n');
   if (!template.includes('__SCHEDULE__')) throw new Error('缺少定时配置模板标记');
   return template.replace('__SCHEDULE__', schedule);
 }
 function getSessions(year) {
   return new Promise((resolve, reject) => {
-    const req = https.get('https://api.openf1.org/v1/sessions?year=' + year, res => {
+    const req = https.get('https://api.jolpi.ca/ergast/f1/' + year + '.json', res => {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('error', reject);
       res.on('end', () => {
         if (res.statusCode !== 200) return reject(new Error('赛程接口 HTTP ' + res.statusCode));
-        try { const data = JSON.parse(body); if (!Array.isArray(data) || !data.length) throw new Error('赛程数据为空或结构异常'); resolve(data); }
+        try {
+          const races = JSON.parse(body)?.MRData?.RaceTable?.Races;
+          if (!Array.isArray(races) || !races.length) throw new Error('赛程数据为空或结构异常');
+          resolve(jolpicaSessions(races, year));
+        }
         catch (err) { reject(err); }
       });
     });
@@ -112,5 +117,19 @@ async function main() {
     }
   }
 }
-module.exports = {cronAt, buildPlan, renderWorkflow};
+function jolpicaSessions(races, year) {
+  const fields = [['FirstPractice','Practice 1','Practice'],['SecondPractice','Practice 2','Practice'],
+    ['ThirdPractice','Practice 3','Practice'],['SprintQualifying','Sprint Qualifying','Qualifying'],
+    ['Sprint','Sprint','Sprint'],['Qualifying','Qualifying','Qualifying'],['Race','Race','Race']];
+  return races.flatMap(r => fields.flatMap(([field,name,type]) => {
+    const value = field === 'Race' ? r : r[field];
+    if (!value?.date || !value?.time) return [];
+    const start = `${value.date}T${value.time}`;
+    if (!Number.isFinite(Date.parse(start))) throw Error('无效赛程时间');
+    return [{session_key:`jolpica_${year}_${r.round}_${field}`,session_type:type,session_name:name,
+      date_start:new Date(start).toISOString(),country_name:r.Circuit?.Location?.country,
+      location:r.Circuit?.Location?.locality,year,is_cancelled:false}];
+  }));
+}
+module.exports = {cronAt, buildPlan, renderWorkflow, jolpicaSessions};
 if (require.main === module) main().catch(err => { console.error(err.message); process.exitCode = 1; });

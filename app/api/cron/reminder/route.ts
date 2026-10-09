@@ -1,157 +1,86 @@
-// app/api/cron/reminder/route.ts
-// 100% 纯云端 Serverless F1 比赛开赛提醒触发器 (彻底脱离本地电脑依赖)
-// 适配 Cloudflare Worker Cron / Vercel Cron / QStash 定时轮询，具备分布式原子幂等防重
-
 import { NextRequest, NextResponse } from 'next/server';
-import { defaultF1Service } from '@/providers/f1/service';
-import { RaceStateService } from '@/lib/f1/race-state';
-import { defaultIdempotencyStore } from '@/lib/storage';
+import { Redis } from '@upstash/redis';
+import { fetchJolpicaCalendar } from '@/providers/f1/jolpica';
+import { F1Meeting } from '@/lib/f1/types';
 import { formatBeijingDisplay } from '@/lib/f1/time';
-
+import { deliverReminder, reminderDue, DeliveryStore } from '@/lib/f1/reminder-delivery';
 export const dynamic = 'force-dynamic';
-
-const DEFAULT_FEISHU_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/c07f5cd2-8f2a-42c1-98db-1a19a761df60';
-
-async function sendFeishuWebhook(webhookUrl: string, payload: any): Promise<boolean> {
+const TEST_KEY = 'f1:reminder:test', HEALTH_KEY = 'f1:reminder:health', TTL = 7 * 86400;
+interface TestSession { id: string; startTimeUTC: string; createdAt: string }
+function client() {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) throw Error('Persistent storage is required');
+  return new Redis({url, token});
+}
+function authorized(req: NextRequest) {
+  return Boolean(process.env.CRON_SECRET && req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`);
+}
+function store(redis: Redis): DeliveryStore {
+  return {
+    async claim(key) { return await redis.set(key, {status:'pending', attemptedAt:new Date().toISOString()}, {nx:true,ex:TTL}) === 'OK'; },
+    async finish(key,status) { await redis.set(key,{status,updatedAt:new Date().toISOString()},{ex:TTL}); },
+    async release(key) { await redis.del(key); },
+    async readStatus(key) { return (await redis.get<{status:string}>(key))?.status || null; }
+  };
+}
+async function send(text: string): Promise<'sent'|'rejected'|'uncertain'> {
+  const webhook = process.env.FEISHU_WEBHOOK_URL || process.env.PUSH_KEY;
+  if (!webhook || !/^https:\/\/open\.feishu\.cn\/open-apis\/bot\/v2\/hook\//.test(webhook)) throw Error('Feishu webhook is required');
   try {
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
+    const res = await fetch(webhook,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg_type:'text',content:{text}}),signal:AbortSignal.timeout(10000)});
     const data = await res.json();
-    return data.code === 0 || data.StatusCode === 0;
-  } catch (err) {
-    console.error('[CloudReminder] Webhook 请求失败:', err);
-    return false;
-  }
+    if (res.ok && (data.code === 0 || data.StatusCode === 0)) return 'sent';
+    return (typeof data.code === 'number' && data.code !== 0) ||
+      (typeof data.StatusCode === 'number' && data.StatusCode !== 0) ? 'rejected' : 'uncertain';
+  } catch { return 'uncertain'; }
 }
-
-export async function GET(req: NextRequest) {
-  return handleReminderCheck(req);
+async function calendar(redis: Redis, season: string) {
+  const key = `f1:reminder:calendar:${season}`;
+  const cached = await redis.get<{updatedAt:string;meetings:F1Meeting[]}>(key);
+  if (cached && Date.now()-Date.parse(cached.updatedAt)<5*60000) return cached;
+  const meetings = await fetchJolpicaCalendar(season);
+  if (!meetings.length) throw Error('No calendar data');
+  const data = {updatedAt:new Date().toISOString(),meetings};
+  await redis.set(key,data,{ex:3600});
+  return data;
 }
-
 export async function POST(req: NextRequest) {
-  return handleReminderCheck(req);
-}
-
-async function handleReminderCheck(req: NextRequest) {
-  const nowMs = Date.now();
-  const webhookUrl = process.env.FEISHU_WEBHOOK_URL || process.env.PUSH_KEY || DEFAULT_FEISHU_WEBHOOK;
-
+  if (!authorized(req)) return NextResponse.json({error:'Unauthorized'},{status:401});
   try {
-    const calendar = await defaultF1Service.getCalendar('2026');
-    if (!calendar || calendar.length === 0) {
-      return NextResponse.json({ status: 'no_calendar_data', checkedAt: new Date(nowMs).toISOString() });
+    const body = await req.json(), start = Date.parse(body.startTimeUTC);
+    if (body.action !== 'schedule_test' || !Number.isFinite(start) || start<Date.now()+32*60000 || start>Date.now()+120*60000) return NextResponse.json({error:'Test start must be 32–120 minutes in the future'},{status:400});
+    const redis=client(), test:TestSession={id:crypto.randomUUID(),startTimeUTC:new Date(start).toISOString(),createdAt:new Date().toISOString()};
+    if (!await redis.set(TEST_KEY,test,{nx:true,ex:3*3600})) return NextResponse.json({error:'Test already scheduled'},{status:409});
+    return NextResponse.json({test,dueAt:new Date(start-30*60000).toISOString()});
+  } catch { return NextResponse.json({error:'Unable to schedule test'},{status:503}); }
+}
+export async function GET(req: NextRequest) {
+  if (!authorized(req)) return NextResponse.json({error:'Unauthorized'},{status:401});
+  try {
+    const redis=client(), test=await redis.get<TestSession>(TEST_KEY);
+    if (req.nextUrl.searchParams.get('mode') === 'status') return NextResponse.json({health:await redis.get(HEALTH_KEY),cloudflare:await redis.get(`${HEALTH_KEY}:cloudflare`),github:await redis.get(`${HEALTH_KEY}:github`),test,testDelivery:test?await redis.get(`f1:delivery:test:${test.id}`):null});
+    const webhook = process.env.FEISHU_WEBHOOK_URL || process.env.PUSH_KEY;
+    if (!webhook || !/^https:\/\/open\.feishu\.cn\/open-apis\/bot\/v2\/hook\//.test(webhook)) throw Error('Feishu webhook is required');
+    const season=String(new Date().getUTCFullYear()), data=await calendar(redis,season), delivery=store(redis);
+    const candidates=data.meetings.flatMap(m=>m.sessions.map(s=>({key:`f1:delivery:${season}:${m.round}:${s.id}:${s.startTimeUTC}`,title:`${m.nameZh} · ${s.name}`,startTimeUTC:s.startTimeUTC,test:false})));
+    if(test) candidates.push({key:`f1:delivery:test:${test.id}`,title:'【测试】模拟 F1 比赛',startTimeUTC:test.startTimeUTC,test:true});
+    const results:{session:string;status:string;remainingMinutes:number}[]=[];
+    for(const item of candidates) {
+      const now=Date.now(); if(!reminderDue(item.startTimeUTC,now)) continue;
+      const remainingMinutes=(Date.parse(item.startTimeUTC)-now)/60000;
+      const status=await deliverReminder(item.key,delivery,()=>send(`${item.title}\n${item.test?'这是云端定时测试，不是真实赛事':'F1 赛前提醒'}\n开赛时间：${formatBeijingDisplay(item.startTimeUTC)}（北京时间）\n距开赛：${remainingMinutes.toFixed(1)} 分钟\n目标提醒时间：${formatBeijingDisplay(new Date(Date.parse(item.startTimeUTC)-30*60000).toISOString())}`));
+      results.push({session:item.title,status,remainingMinutes});
     }
-
-    // 寻找当前最邻近的分站及环节
-    const matchedAlerts: any[] = [];
-
-    for (const meeting of calendar) {
-      if (!meeting.sessions || meeting.sessions.length === 0) continue;
-
-      for (const session of meeting.sessions) {
-        if (!session.startTimeUTC) continue;
-        const startMs = new Date(session.startTimeUTC).getTime();
-        if (isNaN(startMs)) continue;
-
-        const diffMinutes = (startMs - nowMs) / 60000;
-
-        // 提醒时间窗口：开赛前 35 分钟以内，或者已过开赛时间 5 分钟以内的紧急补发 (0 < diff <= 35) 或 (-5 <= diff <= 0)
-        const inStandardWindow = diffMinutes > 0 && diffMinutes <= 35;
-        const inCatchupWindow = diffMinutes <= 0 && diffMinutes >= -5;
-
-        if (inStandardWindow || inCatchupWindow) {
-          const sessionKey = `f1:cloud_reminded:${meeting.round}:${session.id || session.name}:${session.startTimeUTC}`;
-          
-          // 分布式原子幂等检查：7 天内该场次只推送一次，绝对杜绝重复轰炸
-          const alreadyHandled = await defaultIdempotencyStore.checkAndMarkHandled(sessionKey, 86400 * 7);
-          if (alreadyHandled) {
-            matchedAlerts.push({
-              session: session.name,
-              round: meeting.round,
-              status: 'already_sent_suppressed',
-              diffMinutes: Math.round(diffMinutes)
-            });
-            continue;
-          }
-
-          // 组织飞书交互式卡片
-          const isCatchUp = inCatchupWindow;
-          const remMin = Math.max(1, Math.round(diffMinutes));
-          const timeStr = formatBeijingDisplay(session.startTimeUTC);
-          const gpName = `${meeting.nameZh || meeting.name} (${meeting.locality} · ${meeting.circuitName})`;
-          const headerTitle = isCatchUp 
-            ? `🏎️ 【即将开赛紧急提醒】仅剩 ${remMin} 分钟` 
-            : `🏎️ F1 比赛开赛提醒 (前30分钟)`;
-          const noteText = isCatchUp 
-            ? `⚠️ 提示：开赛在即（剩余约 ${remMin} 分钟），请立即就位观赛！🏁` 
-            : `🏁 五盏红灯熄灭，精彩即将开赛，请做好观赛准备！`;
-
-          const cardPayload = {
-            msg_type: 'interactive',
-            card: {
-              header: {
-                title: { tag: 'plain_text', content: headerTitle },
-                template: isCatchUp ? 'orange' : 'carmine'
-              },
-              elements: [
-                {
-                  tag: 'div',
-                  text: {
-                    tag: 'lark_md',
-                    content: `**🏆 大奖赛**：${gpName}\n**⏱️ 环节**：${session.name}\n**📍 赛道地点**：${meeting.locality}\n**⏰ 开赛时间**：${timeStr} (北京时间)\n**⏳ 倒计时**：约 **${remMin} 分钟**`
-                  }
-                },
-                {
-                  tag: 'note',
-                  elements: [
-                    { tag: 'plain_text', content: noteText }
-                  ]
-                },
-                {
-                  tag: 'action',
-                  actions: [
-                    {
-                      tag: 'button',
-                      text: { tag: 'plain_text', content: '📊 查看积分榜' },
-                      type: 'primary',
-                      url: 'https://f1.tike69.cc.cd/standings'
-                    },
-                    {
-                      tag: 'button',
-                      text: { tag: 'plain_text', content: '🤖 问问 AI 战术' },
-                      type: 'default',
-                      url: 'https://f1.tike69.cc.cd/ai'
-                    }
-                  ]
-                }
-              ]
-            }
-          };
-
-          const sentSuccess = await sendFeishuWebhook(webhookUrl, cardPayload);
-
-          matchedAlerts.push({
-            session: session.name,
-            round: meeting.round,
-            diffMinutes: remMin,
-            status: sentSuccess ? 'delivered' : 'failed_network',
-            targetTime: timeStr
-          });
-        }
-      }
-    }
-
-    return NextResponse.json({
-      status: 'ok',
-      mode: '100% Cloud Serverless',
-      executedAt: new Date(nowMs).toISOString(),
-      alertsTriggered: matchedAlerts.length,
-      details: matchedAlerts
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+    const source = req.headers.get('x-reminder-source') || 'unknown';
+    const sourceKey = `${HEALTH_KEY}:${['cloudflare','github'].includes(source) ? source : 'manual'}`;
+    const previous = await redis.get<{checkedAt:string}>(sourceKey);
+    const scheduledAt = req.headers.get('x-scheduled-at');
+    const health={checkedAt:new Date().toISOString(),previousCheckedAt:previous?.checkedAt||null,
+      scheduledAt,lagMs:scheduledAt&&Number.isFinite(Date.parse(scheduledAt))?Date.now()-Date.parse(scheduledAt):null,
+      calendarUpdatedAt:data.updatedAt,meetingCount:data.meetings.length,sessionCount:candidates.filter(s=>!s.test).length,source,results};
+    await redis.set(sourceKey,health,{ex:TTL});
+    await redis.set(HEALTH_KEY,health,{ex:TTL});
+    return NextResponse.json(health,{status:results.some(r=>['failed','uncertain','pending'].includes(r.status))?502:200});
+  } catch { return NextResponse.json({error:'Reminder check failed; inspect configuration and server logs'},{status:503}); }
 }
