@@ -4,7 +4,7 @@ import { fetchJolpicaCalendar } from '@/providers/f1/jolpica';
 import { alignOfficialSchedule } from '@/providers/f1/official-schedule';
 import { F1Meeting } from '@/lib/f1/types';
 import { formatBeijingDisplay } from '@/lib/f1/time';
-import { deliverReminder, reminderDue, DeliveryStore } from '@/lib/f1/reminder-delivery';
+import { deliverReminder, reminderDue, startReminderDue, DeliveryStore } from '@/lib/f1/reminder-delivery';
 export const dynamic = 'force-dynamic';
 const TEST_KEY = 'f1:reminder:test', HEALTH_KEY = 'f1:reminder:health', TTL = 7 * 86400;
 interface TestSession { id: string; startTimeUTC: string; createdAt: string }
@@ -39,12 +39,19 @@ async function send(text: string): Promise<'sent'|'rejected'|'uncertain'> {
 async function calendar(redis: Redis, season: string) {
   const key = `f1:reminder:calendar:${season}`;
   const cached = await redis.get<{updatedAt:string;meetings:F1Meeting[]}>(key);
-  if (cached && Date.now()-Date.parse(cached.updatedAt)<5*60000) return cached;
-  const meetings = await fetchJolpicaCalendar(season);
-  if (!meetings.length) throw Error('No calendar data');
-  const data = {updatedAt:new Date().toISOString(),meetings};
-  await redis.set(key,data,{ex:3600});
-  return data;
+  const age=cached?Date.now()-Date.parse(cached.updatedAt):Infinity;
+  if (cached && age>=0 && age<5*60000) return cached;
+  try {
+    const meetings = await fetchJolpicaCalendar(season);
+    if (!meetings.length) throw Error('No calendar data');
+    const data = {updatedAt:new Date(Date.now()).toISOString(),meetings,secondaryCacheFallback:false};
+    await redis.set(key,data,{ex:86400});
+    return data;
+  } catch(error) {
+    // Only reuse discovery metadata: session times must still pass the live official check below.
+    if(cached && age>=0 && age<86400000) return {...cached,secondaryCacheFallback:true};
+    throw error;
+  }
 }
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({error:'Unauthorized'},{status:401});
@@ -76,12 +83,17 @@ export async function GET(req: NextRequest) {
     }
     const candidates=meetings.flatMap(m=>m.sessions.map(s=>({key:`f1:delivery:${season}:${m.round}:${s.id}:${s.startTimeUTC}`,title:`${m.nameZh} · ${s.name}`,startTimeUTC:s.startTimeUTC,test:false})));
     if(test) candidates.push({key:`f1:delivery:test:${test.id}`,title:'【测试】模拟 F1 比赛',startTimeUTC:test.startTimeUTC,test:true});
-    const results:{session:string;status:string;remainingMinutes:number}[]=[];
+    const results:{session:string;phase:string;status:string;remainingMinutes:number}[]=[];
     for(const item of candidates) {
-      const now=Date.now(); if(!reminderDue(item.startTimeUTC,now)) continue;
+      const now=Date.now();
+      const phase=reminderDue(item.startTimeUTC,now)?'before':startReminderDue(item.startTimeUTC,now)?'start':null;
+      if(!phase) continue;
       const remainingMinutes=(Date.parse(item.startTimeUTC)-now)/60000;
-      const status=await deliverReminder(item.key,delivery,()=>send(`${item.title}\n${item.test?'这是云端定时测试，不是真实赛事':'F1 赛前提醒'}\n开赛时间：${formatBeijingDisplay(item.startTimeUTC)}（北京时间）\n距开赛：${remainingMinutes.toFixed(1)} 分钟\n目标提醒时间：${formatBeijingDisplay(new Date(Date.parse(item.startTimeUTC)-30*60000).toISOString())}`));
-      results.push({session:item.title,status,remainingMinutes});
+      const text=phase==='start'
+        ? `${item.title}\n${item.test?'【测试】模拟开赛提醒':'F1 开赛提醒'}\n已到官方赛程的开赛时间：${formatBeijingDisplay(item.startTimeUTC)}（北京时间）\n${item.test?'这是云端定时测试，不是真实赛事':'实际是否延迟，请以现场公告为准'}`
+        : `${item.title}\n${item.test?'这是云端定时测试，不是真实赛事':'F1 赛前提醒'}\n开赛时间：${formatBeijingDisplay(item.startTimeUTC)}（北京时间）\n距开赛：${remainingMinutes.toFixed(1)} 分钟\n目标提醒时间：${formatBeijingDisplay(new Date(Date.parse(item.startTimeUTC)-30*60000).toISOString())}`;
+      const status=await deliverReminder(phase==='start'?`${item.key}:start`:item.key,delivery,()=>send(text));
+      results.push({session:item.title,phase,status,remainingMinutes});
     }
     const source = req.headers.get('x-reminder-source') || 'unknown';
     const sourceKey = `${HEALTH_KEY}:${['cloudflare','github'].includes(source) ? source : 'manual'}`;
@@ -89,7 +101,8 @@ export async function GET(req: NextRequest) {
     const scheduledAt = req.headers.get('x-scheduled-at');
     const health={checkedAt:new Date().toISOString(),previousCheckedAt:previous?.checkedAt||null,
       scheduledAt,lagMs:scheduledAt&&Number.isFinite(Date.parse(scheduledAt))?Date.now()-Date.parse(scheduledAt):null,
-      calendarUpdatedAt:data.updatedAt,meetingCount:data.meetings.length,sessionCount:candidates.filter(s=>!s.test).length,official,source,results};
+      calendarUpdatedAt:data.updatedAt,secondaryCacheFallback:'secondaryCacheFallback' in data?data.secondaryCacheFallback:false,
+      meetingCount:data.meetings.length,sessionCount:candidates.filter(s=>!s.test).length,official,source,results};
     await redis.set(sourceKey,health,{ex:TTL});
     await redis.set(HEALTH_KEY,health,{ex:TTL});
     return NextResponse.json(health,{status:results.some(r=>['failed','uncertain','pending'].includes(r.status))?502:200});

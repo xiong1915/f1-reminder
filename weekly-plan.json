@@ -1,36 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-10-09T14:04:02.570Z",
-  "valid_until": "2026-10-17T14:04:02.570Z",
+  "generated_at": "2026-10-10T13:13:47.155Z",
+  "valid_until": "2026-10-18T13:13:47.155Z",
   "sessions": [
-    {
-      "session_key": "jolpica_2026_17_Sprint",
-      "session_type": "Sprint",
-      "session_name": "Sprint",
-      "date_start": "2026-10-10T09:00:00.000Z",
-      "country_name": "Singapore",
-      "location": "Marina Bay",
-      "year": 2026,
-      "is_cancelled": false,
-      "is_catchup": false,
-      "remind_at": "2026-10-10T08:25:00.000Z",
-      "reminder_cron": "25 8 10 10 *",
-      "backup_cron": "30 8 10 10 *"
-    },
-    {
-      "session_key": "jolpica_2026_17_Qualifying",
-      "session_type": "Qualifying",
-      "session_name": "Qualifying",
-      "date_start": "2026-10-10T13:00:00.000Z",
-      "country_name": "Singapore",
-      "location": "Marina Bay",
-      "year": 2026,
-      "is_cancelled": false,
-      "is_catchup": false,
-      "remind_at": "2026-10-10T12:25:00.000Z",
-      "reminder_cron": "25 12 10 10 *",
-      "backup_cron": "30 12 10 10 *"
-    },
     {
       "session_key": "jolpica_2026_17_Race",
       "session_type": "Race",
@@ -43,7 +15,9 @@
       "is_catchup": false,
       "remind_at": "2026-10-11T11:25:00.000Z",
       "reminder_cron": "25 11 11 10 *",
-      "backup_cron": "30 11 11 10 *"
+      "backup_cron": "30 11 11 10 *",
+      "start_cron": "0 12 11 10 *",
+      "start_backup_cron": "2 12 11 10 *"
     }
   ]
 }

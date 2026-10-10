@@ -10,6 +10,12 @@ export function reminderDue(start: string, now: number): boolean {
   return Number.isFinite(remaining) && remaining > 0 && remaining <= 35 * 60000;
 }
 
+export function startReminderDue(start: string, now: number): boolean {
+  const elapsed = now - Date.parse(start);
+  // Allow delayed execution/retries briefly, without announcing old sessions hours later.
+  return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < 10 * 60000;
+}
+
 // A timeout cannot prove whether the receiver accepted the message.
 export async function deliverReminder(
   key: string, store: DeliveryStore, send: () => Promise<'sent' | 'rejected' | 'uncertain'>

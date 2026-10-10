@@ -37,11 +37,15 @@ test('Planner: 每场比赛生成主备双 cron (提前 35m 与提前 30m)', () 
 
   const plan = buildPlan(mockSessions, mockNow);
   const session = plan.sessions[0];
+  assert.strictEqual(session.start_cron, '0 14 13 10 *');
+  assert.strictEqual(session.start_backup_cron, '2 14 13 10 *');
   assert.strictEqual(session.reminder_cron, '25 13 13 10 *', '主 cron 应为开赛前 35 分钟 (13:25 UTC)');
   assert.strictEqual(session.backup_cron, '30 13 13 10 *', '备用 cron 应为开赛前 30 分钟 (13:30 UTC)');
 
   const template = 'name: Test\non:\n__SCHEDULE__\njobs: {}';
   const workflow = renderWorkflow(template, plan);
+  assert.strictEqual(workflow.includes("- cron: '0 14 13 10 *'"),true);
+  assert.strictEqual(workflow.includes("- cron: '2 14 13 10 *'"),true);
   assert.strictEqual(workflow.includes("- cron: '25 13 13 10 *'"), true, 'workflow 必须包含主 cron');
   assert.strictEqual(workflow.includes("- cron: '30 13 13 10 *'"), true, 'workflow 必须包含备用 cron');
 });

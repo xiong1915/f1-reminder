@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { GET, POST } from '../app/api/cron/reminder/route';
 
-async function harness(run: (h: {advance:(ms:number)=>void; sent:()=>number; states:Map<string,any>; failStorage:()=>void; rejectSend:(value:boolean)=>void; timeoutSend:(value?:boolean)=>void; failCalendar:()=>void})=>Promise<void>) {
+async function harness(run: (h: {advance:(ms:number)=>void; sent:()=>number; states:Map<string,any>; failStorage:()=>void; rejectSend:(value:boolean)=>void; timeoutSend:(value?:boolean)=>void; failCalendar:()=>void; failSecondary:()=>void})=>Promise<void>) {
   const saved={...process.env};
-  let now=Date.parse('2026-10-10T00:00:00Z'), messages=0, failStorage=false, rejected=false, timedOut=false, calendarFailed=false;
+  let now=Date.parse('2026-10-10T00:00:00Z'), messages=0, failStorage=false, rejected=false, timedOut=false, calendarFailed=false,secondaryFailed=false;
   const states=new Map<string,any>();
   const expirations=new Map<string,number>();
   process.env.CRON_SECRET='test-only';
@@ -41,7 +41,7 @@ async function harness(run: (h: {advance:(ms:number)=>void; sent:()=>number; sta
         {'@type':'SportsEvent',name:'Race - Singapore Grand Prix',startDate:'2026-10-11T12:00:00Z'}
       ]})}</script>`);
     }
-    if(String(input).includes('api.jolpi.ca') && calendarFailed) throw Error('calendar offline');
+    if(String(input).includes('api.jolpi.ca') && (calendarFailed||secondaryFailed)) throw Error('calendar offline');
     if(String(input).includes('api.jolpi.ca')) return Response.json({MRData:{RaceTable:{Races:[{
       season:'2026',round:'17',raceName:'Singapore Grand Prix',date:'2026-10-11',time:'12:00:00Z',
       Qualifying:{date:'2026-10-10',time:'13:00:00Z'},
@@ -49,12 +49,23 @@ async function harness(run: (h: {advance:(ms:number)=>void; sent:()=>number; sta
     }]}}});
     throw Error('Unexpected network request');
   });
-  try {await run({advance:ms=>{now+=ms;},sent:()=>messages,states,failStorage:()=>{failStorage=true;},rejectSend:value=>{rejected=value;},timeoutSend:(value=true)=>{timedOut=value;},failCalendar:()=>{calendarFailed=true;}});}
+  try {await run({advance:ms=>{now+=ms;},sent:()=>messages,states,failStorage:()=>{failStorage=true;},rejectSend:value=>{rejected=value;},timeoutSend:(value=true)=>{timedOut=value;},failCalendar:()=>{calendarFailed=true;},failSecondary:()=>{secondaryFailed=true;}});}
   finally {mock.restoreAll(); process.env=saved;}
 }
 function req(method='GET',body?:object,source='cloudflare') {
   return new NextRequest('https://example.invalid/api/cron/reminder',{method,headers:{authorization:'Bearer test-only','x-reminder-source':source,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
 }
+
+test('before and start reminders are separate, start never early and each phase deduplicates',async()=>harness(async h=>{
+  await POST(req('POST',{action:'schedule_test',startTimeUTC:'2026-10-10T00:40:00Z'}));
+  h.advance(5*60000);assert.equal((await GET(req())).status,200);assert.equal(h.sent(),1);
+  h.advance(35*60000-1);assert.equal((await GET(req())).status,200);assert.equal(h.sent(),1);
+  h.advance(1);
+  const response=await GET(req());assert.equal(response.status,200);assert.equal(h.sent(),2);
+  assert.equal((await response.json()).results[0].phase,'start');
+  assert.equal((await GET(req('GET',undefined,'github'))).status,200);assert.equal(h.sent(),2);
+  h.advance(10*60000);assert.equal((await GET(req())).status,200);assert.equal(h.sent(),2);
+}));
 test('scheduled synthetic session uses the real route and sends at T-35, once across both schedulers',async()=>harness(async h=>{
   let response:Response=await POST(req('POST',{action:'schedule_test',startTimeUTC:'2026-10-10T00:40:00Z'}));
   assert.equal(response.status,200);
@@ -92,6 +103,20 @@ test('live route retries an explicitly rejected message but does not immediately
 }));
 test('calendar provider outage is reported and cannot send guessed race information',async()=>harness(async h=>{
   h.failCalendar();assert.equal((await GET(req())).status,503);assert.equal(h.sent(),0);
+}));
+
+test('secondary outage uses recent discovery cache but still verifies live official time',async()=>harness(async h=>{
+  assert.equal((await GET(req())).status,200);
+  h.failSecondary();h.advance(12*3600000+55*60000);
+  const response=await GET(req());assert.equal(response.status,200);assert.equal(h.sent(),1);
+  const health=await response.json();assert.equal(health.secondaryCacheFallback,true);
+  assert.equal(health.official[0].changes[0].official,'2026-10-10T13:30:00.000Z');
+}));
+
+test('official outage cannot use secondary or cached times to send',async()=>harness(async h=>{
+  assert.equal((await GET(req())).status,200);
+  h.failCalendar();h.advance(12*3600000+55*60000);
+  assert.equal((await GET(req())).status,503);assert.equal(h.sent(),0);
 }));
 
 test('uncertain delivery expires and retries',async()=>harness(async h=>{

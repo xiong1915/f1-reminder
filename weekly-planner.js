@@ -44,7 +44,9 @@ function buildPlan(sessions, now = Date.now()) {
       is_catchup: isCatchUp,
       remind_at: new Date(isCatchUp ? now : remindMain).toISOString(),
       reminder_cron: reminderCron,
-      backup_cron: backupCron
+      backup_cron: backupCron,
+      start_cron: cronAt(start),
+      start_backup_cron: cronAt(start + 2 * 60000)
     });
   }
   selected.sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start));
@@ -55,6 +57,8 @@ function renderWorkflow(template, plan) {
   for (const s of plan.sessions) {
     if (s.reminder_cron) allCrons.push(s.reminder_cron);
     if (s.backup_cron) allCrons.push(s.backup_cron);
+    if (s.start_cron) allCrons.push(s.start_cron);
+    if (s.start_backup_cron) allCrons.push(s.start_backup_cron);
   }
   const crons = [...new Set(allCrons)];
   // The health-check cadence must survive weekly regeneration, including empty weeks.

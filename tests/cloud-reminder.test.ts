@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reminderDue, deliverReminder, DeliveryStore } from '../lib/f1/reminder-delivery';
+import { reminderDue, startReminderDue, deliverReminder, DeliveryStore } from '../lib/f1/reminder-delivery';
 
 function memoryStore() {
   const states = new Map<string, string>();
@@ -12,6 +12,15 @@ function memoryStore() {
   };
   return { states, store };
 }
+
+test('start reminder never sends early and catches up for less than ten minutes',()=>{
+  const start='2026-10-10T13:30:00Z',now=Date.parse(start);
+  assert.equal(startReminderDue(start,now-1),false);
+  assert.equal(startReminderDue(start,now),true);
+  assert.equal(startReminderDue(start,now+9*60000),true);
+  assert.equal(startReminderDue(start,now+10*60000),false);
+  assert.equal(startReminderDue('invalid',now),false);
+});
 test('35-minute boundary, delayed catch-up, no early or post-start reminder', () => {
   const start = '2026-10-10T09:00:00Z';
   const t = Date.parse(start);
