@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { fetchJolpicaCalendar } from '@/providers/f1/jolpica';
+import { alignOfficialSchedule } from '@/providers/f1/official-schedule';
 import { F1Meeting } from '@/lib/f1/types';
 import { formatBeijingDisplay } from '@/lib/f1/time';
 import { deliverReminder, reminderDue, DeliveryStore } from '@/lib/f1/reminder-delivery';
@@ -63,7 +64,17 @@ export async function GET(req: NextRequest) {
     const webhook = process.env.FEISHU_WEBHOOK_URL || process.env.PUSH_KEY;
     if (!webhook || !/^https:\/\/open\.feishu\.cn\/open-apis\/bot\/v2\/hook\//.test(webhook)) throw Error('Feishu webhook is required');
     const season=String(new Date().getUTCFullYear()), data=await calendar(redis,season), delivery=store(redis);
-    const candidates=data.meetings.flatMap(m=>m.sessions.map(s=>({key:`f1:delivery:${season}:${m.round}:${s.id}:${s.startTimeUTC}`,title:`${m.nameZh} · ${s.name}`,startTimeUTC:s.startTimeUTC,test:false})));
+    // Verify the active weekend every invocation; a refreshed secondary cache can still contain old times.
+    const official=[];
+    const meetings=[];
+    for(const meeting of data.meetings) {
+      const race=Date.parse(meeting.raceStartUTC);
+      if(race<Date.now()-86400000||race>Date.now()+4*86400000) continue;
+      const aligned=await alignOfficialSchedule(meeting);
+      official.push({sourceUrl:aligned.sourceUrl,checkedAt:aligned.checkedAt,changes:aligned.changes});
+      meetings.push(aligned.meeting);
+    }
+    const candidates=meetings.flatMap(m=>m.sessions.map(s=>({key:`f1:delivery:${season}:${m.round}:${s.id}:${s.startTimeUTC}`,title:`${m.nameZh} · ${s.name}`,startTimeUTC:s.startTimeUTC,test:false})));
     if(test) candidates.push({key:`f1:delivery:test:${test.id}`,title:'【测试】模拟 F1 比赛',startTimeUTC:test.startTimeUTC,test:true});
     const results:{session:string;status:string;remainingMinutes:number}[]=[];
     for(const item of candidates) {
@@ -78,7 +89,7 @@ export async function GET(req: NextRequest) {
     const scheduledAt = req.headers.get('x-scheduled-at');
     const health={checkedAt:new Date().toISOString(),previousCheckedAt:previous?.checkedAt||null,
       scheduledAt,lagMs:scheduledAt&&Number.isFinite(Date.parse(scheduledAt))?Date.now()-Date.parse(scheduledAt):null,
-      calendarUpdatedAt:data.updatedAt,meetingCount:data.meetings.length,sessionCount:candidates.filter(s=>!s.test).length,source,results};
+      calendarUpdatedAt:data.updatedAt,meetingCount:data.meetings.length,sessionCount:candidates.filter(s=>!s.test).length,official,source,results};
     await redis.set(sourceKey,health,{ex:TTL});
     await redis.set(HEALTH_KEY,health,{ex:TTL});
     return NextResponse.json(health,{status:results.some(r=>['failed','uncertain','pending'].includes(r.status))?502:200});

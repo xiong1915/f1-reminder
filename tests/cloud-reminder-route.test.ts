@@ -34,9 +34,17 @@ async function harness(run: (h: {advance:(ms:number)=>void; sent:()=>number; sta
       return Response.json(Array.isArray(commands[0])?commands.map(execute):execute(commands));
     }
     if(String(input).includes('open.feishu.cn')) {messages++;if(timedOut)throw Error('timeout');return Response.json({code:rejected?19021:0});}
+    if(String(input).includes('www.formula1.com')) {
+      if(calendarFailed) throw Error('official calendar offline');
+      return new Response(`<script type="application/ld+json">${JSON.stringify({subEvent:[
+        {'@type':'SportsEvent',name:'Qualifying - Singapore Grand Prix',startDate:'2026-10-10T13:30:00Z'},
+        {'@type':'SportsEvent',name:'Race - Singapore Grand Prix',startDate:'2026-10-11T12:00:00Z'}
+      ]})}</script>`);
+    }
     if(String(input).includes('api.jolpi.ca') && calendarFailed) throw Error('calendar offline');
     if(String(input).includes('api.jolpi.ca')) return Response.json({MRData:{RaceTable:{Races:[{
       season:'2026',round:'17',raceName:'Singapore Grand Prix',date:'2026-10-11',time:'12:00:00Z',
+      Qualifying:{date:'2026-10-10',time:'13:00:00Z'},
       Circuit:{circuitId:'marina_bay',circuitName:'Marina Bay',Location:{country:'Singapore',locality:'Singapore'}}
     }]}}});
     throw Error('Unexpected network request');
@@ -55,6 +63,17 @@ test('scheduled synthetic session uses the real route and sends at T-35, once ac
   response=await GET(req());assert.equal(response.status,200);assert.equal(h.sent(),1);
   const health=await response.json(); assert.equal(health.results[0].remainingMinutes,35);
   response=await GET(req('GET',undefined,'github'));assert.equal(response.status,200);assert.equal(h.sent(),1);
+}));
+
+test('official time change overrides secondary time and old sent record cannot suppress corrected reminder',async()=>harness(async h=>{
+  h.states.set('f1:delivery:2026:17:quali-17:2026-10-10T13:00:00Z',{status:'sent'});
+  h.advance(12*3600000+54*60000);
+  assert.equal((await GET(req())).status,200);assert.equal(h.sent(),0);
+  h.advance(60000);
+  const response=await GET(req());assert.equal(response.status,200);assert.equal(h.sent(),1);
+  const health=await response.json();assert.equal(health.official[0].changes[0].official,'2026-10-10T13:30:00.000Z');
+  assert.equal(health.results[0].remainingMinutes,35);
+  assert.equal((await GET(req())).status,200);assert.equal(h.sent(),1);
 }));
 test('unauthorized calls cannot schedule or send; storage failure stops checks',async()=>harness(async h=>{
   const noAuth=new NextRequest('https://example.invalid/api/cron/reminder');
