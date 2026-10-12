@@ -13,7 +13,7 @@ export class TavilySearchProvider implements SearchProvider {
     this.apiKey = apiKey || process.env.TAVILY_API_KEY || '';
   }
 
-  async search(query: string): Promise<SearchResponse> {
+  async search(query: string, signal?: AbortSignal): Promise<SearchResponse> {
     if (!this.apiKey) {
       return { success: false, results: [], provider: this.id, reason: 'no_key' };
     }
@@ -31,7 +31,7 @@ export class TavilySearchProvider implements SearchProvider {
           search_depth: 'basic',
           max_results: 5
         }),
-        signal: controller.signal
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
 
       if (!res.ok) {

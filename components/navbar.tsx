@@ -42,10 +42,10 @@ export function Navbar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }} className="desktop-nav">
           <Link href="/#race" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>当前分站</Link>
           <Link href="/standings" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>积分榜</Link>
+          <Link href="/replay" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>动态回放</Link>
           <Link href="/drivers" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>车手</Link>
           <Link href="/teams" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>车队</Link>
           <Link href="/races" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.2s' }}>全季赛历</Link>
-          <Link href="/system" style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>系统状态</Link>
         </div>
 
         {/* Right CTA & Clock */}
@@ -95,11 +95,11 @@ export function Navbar() {
         }}>
           <Link href="/#race" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>当前分站赛程</Link>
           <Link href="/standings" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>锦标赛积分榜</Link>
+          <Link href="/replay" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>比赛动态回放</Link>
           <Link href="/drivers" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>正式车手阵容</Link>
           <Link href="/teams" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>制造商品牌</Link>
           <Link href="/races" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600 }}>2026 全年赛历</Link>
           <Link href="/ai" onClick={() => setMenuOpen(false)} style={{ fontSize: '20px', fontWeight: 600, color: '#ff453a' }}>TIKE AI 智能控制台 ✦</Link>
-          <Link href="/system" onClick={() => setMenuOpen(false)} style={{ fontSize: '16px', color: 'var(--text-muted)', marginTop: '20px' }}>系统监控遥测</Link>
           <div className="tabular-nums" style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-muted)', marginTop: 'auto' }}>
             {bjTimeStr} · UTC+8
           </div>

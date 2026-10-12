@@ -28,7 +28,7 @@
 | 14 | `madring` | 马德里国际赛道 / Madring Circuit | 5.474 | 20 | `2026-debut` | `268abe27c33df250...` |
 | 15 | `baku` | 巴库市街赛道 / Baku City Circuit | 6.003 | 20 | `grand-prix` | `5e8b830cecd1e60d...` |
 | 16 | `sepang` | 雪邦国际赛车场 / Sepang International Circuit | 5.543 | 15 | `grand-prix` | `cb4201d090743cea...` |
-| 17 | `marina_bay` | 滨海湾市街赛道 / Marina Bay Street Circuit | 4.94 | 19 | `2023-current` | `dae0964e13f84461...` |
+| 17 | `marina_bay` | 滨海湾市街赛道 / Marina Bay Street Circuit | 4.927 | 19 | `2023-current` | `dae0964e13f84461...` |
 | 18 | `americas` | 美洲赛道 (COTA) / Circuit of the Americas | 5.513 | 20 | `grand-prix` | `9e6cc20f99e1c01a...` |
 | 19 | `rodriguez` | 罗德里格斯兄弟赛车场 / Autódromo Hermanos Rodríguez | 4.304 | 17 | `grand-prix` | `1f3c102002fea1a9...` |
 | 20 | `interlagos` | 英特拉格斯赛道 / Autódromo José Carlos Pace (Interlagos) | 4.309 | 15 | `grand-prix` | `dc0527027b4636ef...` |

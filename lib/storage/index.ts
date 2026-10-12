@@ -2,7 +2,7 @@
 // TIKE V3 统一存储工厂与依赖注入中心 (支持 Upstash Redis Free 与内存安全降级切换)
 
 import { Redis } from '@upstash/redis';
-import {
+import type {
   CacheStore,
   SessionStore,
   IdempotencyStore,
@@ -22,7 +22,7 @@ import {
   RedisRateLimitStore
 } from './redis';
 
-export * from './interfaces';
+export type * from './interfaces';
 export {
   MemoryCacheStore,
   MemorySessionStore,

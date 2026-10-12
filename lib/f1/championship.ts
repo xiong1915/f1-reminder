@@ -43,14 +43,16 @@ export function simulateTitleScenario(params: TitleSimParams): TitleSimResult {
   const gapDelta = newGap - currentGap;
 
   let narrative = '';
-  if (gapDelta > 0) {
-    narrative = `若 ${leader.name} 在本周末稳定取分（+${leaderWeekend}分），领先优势将扩大至 ${newGap} 分（扩大 ${gapDelta} 分），建立稳固争冠壁垒。`;
-  } else if (gapDelta < 0 && newGap > 0) {
-    narrative = `${challenger.name} 斩获 +${challengerWeekend} 分，成功将分差缩小至 ${newGap} 分（追回 ${Math.abs(gapDelta)} 分），争冠悬念进一步加剧。`;
-  } else if (newGap <= 0) {
-    narrative = `${challenger.name} 实现了积分反超或持平（分差 ${newGap} 分），年度车手总冠军争夺发生实质性逆转！`;
+  if (newGap === 0) {
+    narrative = `若按所选赛果完赛，${leader.name} 与 ${challenger.name} 预计积分持平（均为 ${leaderProjected} 分）。预计积分持平，最终排名还需比较同分规则。（仅计算所选比赛结果，不代表夺冠概率）`;
+  } else if (newGap > 0) {
+    if (gapDelta > 0) {
+      narrative = `若按所选赛果完赛，${leader.name} 本周末新增 ${leaderWeekend} 分（预计总分 ${leaderProjected} 分），${challenger.name} 本周末新增 ${challengerWeekend} 分（预计总分 ${challengerProjected} 分），领先优势将扩大至 ${newGap} 分。（仅计算所选比赛结果，不代表夺冠概率）`;
+    } else {
+      narrative = `若按所选赛果完赛，${leader.name} 本周末新增 ${leaderWeekend} 分（预计总分 ${leaderProjected} 分），${challenger.name} 本周末新增 ${challengerWeekend} 分（预计总分 ${challengerProjected} 分），预计分差为 ${newGap} 分。（仅计算所选比赛结果，不代表夺冠概率）`;
+    }
   } else {
-    narrative = `双方本周末所获积分相当（+${leaderWeekend} vs +${challengerWeekend}），积分差距维持在 ${newGap} 分左右。`;
+    narrative = `若按所选赛果完赛，${challenger.name} 本周末新增 ${challengerWeekend} 分（预计总分 ${challengerProjected} 分），反超 ${leader.name}（预计总分 ${leaderProjected} 分），预计领先 ${Math.abs(newGap)} 分。（仅计算所选比赛结果，不代表夺冠概率）`;
   }
 
   return {
@@ -60,5 +62,18 @@ export function simulateTitleScenario(params: TitleSimParams): TitleSimResult {
     newGap,
     gapDelta,
     narrative
+  };
+}
+
+export const FEATURE_POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+export const SPRINT_POINTS_TABLE = [8, 7, 6, 5, 4, 3, 2, 1];
+
+export function calculateWeekendProjection(racePos: number, sprintPos: number = 0, isSprintWeekend: boolean = false) {
+  const featurePts = getRacePoints(racePos);
+  const sprintPts = isSprintWeekend ? getSprintPoints(sprintPos) : 0;
+  return {
+    featurePts,
+    sprintPts,
+    totalNewPts: featurePts + sprintPts
   };
 }

@@ -455,3 +455,42 @@ body:has(.ai-chat-console) footer {
   overflow: hidden;
 }
 
+/* --------------------------------------------------------------------------
+   APEX REPLAY 全屏与手机横屏沉浸适配
+   -------------------------------------------------------------------------- */
+.replay-fullscreen-mode {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: #090a0d !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  padding: 16px !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .replay-workbench {
+    grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr) !important;
+    gap: 12px !important;
+  }
+  .replay-canvas-container {
+    min-height: 240px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .replay-workbench {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+
+.replay-fullscreen-mode {
+  height: 100dvh !important;
+  overflow: auto !important;
+}
+@media (max-width: 768px) {
+  .replay-fullscreen-mode .replay-canvas-container { min-height: 240px !important; }
+}

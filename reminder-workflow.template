@@ -48,6 +48,16 @@ jobs:
               https://f1.tike69.cc.cd/api/cron/reminder
           fi
 
+      - name: Refresh website data without notifications
+        if: ${{ always() && github.event.inputs.test_mode != 'true' }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "::error::CRON_SECRET is missing"; exit 1; }
+          curl --silent --show-error --fail --max-time 45 --retry 0 --output /dev/null \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://f1.tike69.cc.cd/api/cron/sync
+
       - name: Save sent history to repository
         # 即使前序推送报错，也要保存已成功推送的记录与本地拉取的赛程缓存，避免丢失与重复
         if: always()

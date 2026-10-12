@@ -1,6 +1,6 @@
 // components/circuit_visual.tsx
 // 统一真实赛道视觉呈现组件 (CircuitVisual)
-// 包含 5 层专业赛道拓扑渲染、起终点标线、DRS 动效及 Reduced Motion 无障碍适配
+// 遵循真实性原则：未知或该年代无对应构型时严禁回退新加坡，清晰展示“赛道构型暂缺”提示
 
 import React from 'react';
 import { CircuitRegistry } from '@/lib/circuits/registry';
@@ -17,14 +17,45 @@ interface CircuitVisualProps {
 
 export function CircuitVisual({
   circuitId,
-  season = '2026',
+  season,
   layoutId,
   className = '',
   animate = true,
   style = {}
 }: CircuitVisualProps) {
-  const meta = CircuitRegistry.getCircuit(circuitId, season, layoutId) || CircuitRegistry.getCircuit('marina_bay')!;
+  const meta = CircuitRegistry.getCircuit(circuitId, season, layoutId);
   const normalizedKey = normalizeCircuitId(circuitId);
+
+  if (!meta) {
+    return (
+      <div
+        className={`circuit-visual-unavailable card-dark ${className}`}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: '220px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          textAlign: 'center',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px dashed var(--line-dark, rgba(255, 255, 255, 0.15))',
+          borderRadius: '8px',
+          ...style
+        }}
+      >
+        <div style={{ fontSize: '28px', marginBottom: '8px', opacity: 0.5 }}>🏁</div>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary, #94a3b8)', marginBottom: '4px' }}>
+          历史赛道构型暂缺
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted, #64748b)', maxWidth: '280px', lineHeight: 1.5 }}>
+          {circuitId ? `赛道 [${circuitId}]` : '该分站'} 在 {season ? `${season} 年代` : '当前'} 的真实测绘矢量构型暂未收录，严格杜绝使用其他赛道冒充
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

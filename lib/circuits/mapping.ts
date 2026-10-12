@@ -3,7 +3,10 @@
 
 export const CIRCUIT_ID_ALIASES: Record<string, string> = {
   'albert-park': 'albert_park',
+  'albert_park': 'albert_park',
   'melbourne': 'albert_park',
+  'bahrain': 'bahrain',
+  'sakhir': 'bahrain',
   'shanghai': 'shanghai',
   'chinese': 'shanghai',
   'suzuka': 'suzuka',
@@ -17,12 +20,15 @@ export const CIRCUIT_ID_ALIASES: Record<string, string> = {
   'catalunya': 'catalunya',
   'barcelona': 'catalunya',
   'red-bull-ring': 'red_bull_ring',
+  'red_bull_ring': 'red_bull_ring',
   'spielberg': 'red_bull_ring',
   'austrian': 'red_bull_ring',
+  'a1-ring': 'red_bull_ring',
   'silverstone': 'silverstone',
   'british': 'silverstone',
   'spa': 'spa',
   'spa-francorchamps': 'spa',
+  'spa_francorchamps': 'spa',
   'belgian': 'spa',
   'hungaroring': 'hungaroring',
   'budapest': 'hungaroring',
@@ -38,14 +44,19 @@ export const CIRCUIT_ID_ALIASES: Record<string, string> = {
   'sepang': 'sepang',
   'malaysian': 'sepang',
   'marina-bay': 'marina_bay',
+  'marina_bay': 'marina_bay',
   'singapore': 'marina_bay',
   'cota': 'americas',
   'americas': 'americas',
+  'circuit_of_the_americas': 'americas',
   'austin': 'americas',
   'rodriguez': 'rodriguez',
+  'hermanos_rodriguez': 'rodriguez',
   'mexico': 'rodriguez',
   'interlagos': 'interlagos',
+  'jose_carlos_pace': 'interlagos',
   'sao-paulo': 'interlagos',
+  'sao_paulo': 'interlagos',
   'brazilian': 'interlagos',
   'vegas': 'vegas',
   'las-vegas': 'vegas',
@@ -56,13 +67,45 @@ export const CIRCUIT_ID_ALIASES: Record<string, string> = {
   'yas-marina': 'yas_marina',
   'yas_marina': 'yas_marina',
   'abu-dhabi': 'yas_marina',
-  'abu_dhabi': 'yas_marina'
+  'abu_dhabi': 'yas_marina',
+  'imola': 'imola',
+  'enzo_e_dino_ferrari': 'imola',
+  'emilia_romagna': 'imola',
+  'nurburgring': 'nurburgring',
+  'nurburg': 'nurburgring',
+  'hockenheim': 'hockenheim',
+  'hockenheimring': 'hockenheim',
+  'paul_ricard': 'paul_ricard',
+  'paul-ricard': 'paul_ricard',
+  'le_castellet': 'paul_ricard',
+  'magny_cours': 'magny_cours',
+  'magny-cours': 'magny_cours',
+  'estoril': 'estoril',
+  'mugello': 'mugello',
+  'portimao': 'portimao',
+  'algarve': 'portimao',
+  'istanbul': 'istanbul',
+  'istanbul_park': 'istanbul',
+  'sochi': 'sochi',
+  'sochi_autodrom': 'sochi',
+  'russian': 'sochi',
+  'jeddah': 'jeddah',
+  'jeddah_corniche': 'jeddah',
+  'saudi': 'jeddah',
+  'indianapolis': 'indianapolis',
+  'brickyard': 'indianapolis',
+  'galvez': 'galvez',
+  'buenos_aires': 'galvez',
+  'kyalami': 'kyalami',
+  'watkins_glen': 'watkins_glen',
+  'watkins-glen': 'watkins_glen',
+  'jacarepagua': 'jacarepagua'
 };
 
-export function normalizeCircuitId(rawId: string): string {
-  if (!rawId) return 'marina_bay';
-  const lower = rawId.toLowerCase().trim();
-  const withUnder = lower.replace(/[-\s]+/g, '_');
-  const withHyphen = lower.replace(/[_\s]+/g, '-');
-  return CIRCUIT_ID_ALIASES[withUnder] || CIRCUIT_ID_ALIASES[withHyphen] || CIRCUIT_ID_ALIASES[lower] || withUnder;
+export function normalizeCircuitId(rawId?: string | null): string {
+  if (!rawId) return '';
+  const raw = rawId.toLowerCase().trim();
+  const hyphen = raw.replace(/[_\s]/g, '-');
+  const under = raw.replace(/[-\s]/g, '_');
+  return CIRCUIT_ID_ALIASES[raw] || CIRCUIT_ID_ALIASES[hyphen] || CIRCUIT_ID_ALIASES[under] || under;
 }

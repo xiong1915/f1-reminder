@@ -1,9 +1,36 @@
 /** @type {import('next').NextConfig} */
-const BUILD_ID =
-  process.env.NEXT_PUBLIC_BUILD_ID ||
-  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
-  process.env.VERCEL_DEPLOYMENT_ID ||
-  'apex-v3-605c56c';
+const securityHeaders = [
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff',
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'strict-origin-when-cross-origin',
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'DENY',
+  },
+  {
+    key: 'Permissions-Policy',
+    value: 'camera=(), microphone=(), geolocation=()',
+  },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://cloudflareinsights.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'"
+    ].join('; '),
+  },
+];
 
 const nextConfig = {
   reactStrictMode: true,
@@ -12,12 +39,7 @@ const nextConfig = {
     return [
       {
         source: '/:path*',
-        headers: [
-          {
-            key: 'X-APEX-Build',
-            value: BUILD_ID,
-          },
-        ],
+        headers: securityHeaders,
       },
     ];
   },

@@ -19,7 +19,7 @@ export const FIXTURE_2026_CALENDAR = [
   { round: 13, name: "Italian Grand Prix", nameZh: "意大利大奖赛", circuit: "Autodromo Nazionale Monza", dateStart: "2026-09-04", dateEnd: "2026-09-06", isSprint: false, status: "finished" },
   { round: 14, name: "Spanish Grand Prix", nameZh: "西班牙大奖赛", circuit: "Madring Circuit", dateStart: "2026-09-11", dateEnd: "2026-09-13", isSprint: false, status: "finished" },
   { round: 15, name: "Azerbaijan Grand Prix", nameZh: "阿塞拜疆大奖赛", circuit: "Baku City Circuit", dateStart: "2026-09-24", dateEnd: "2026-09-26", isSprint: false, status: "finished" },
-  { round: 16, name: "Bahrain Grand Prix in Malaysia", nameZh: "雪邦特别大奖赛", circuit: "Sepang International Circuit", dateStart: "2026-10-02", dateEnd: "2026-10-04", isSprint: false, status: "finished" },
+  { round: 16, name: "Bahrain Grand Prix in Malaysia", nameZh: "巴林大奖赛（马来西亚站）", circuit: "Sepang International Circuit", dateStart: "2026-10-02", dateEnd: "2026-10-04", isSprint: false, status: "finished" },
   { round: 17, name: "Singapore Grand Prix", nameZh: "新加坡大奖赛", circuit: "Marina Bay Street Circuit", dateStart: "2026-10-09", dateEnd: "2026-10-11", isSprint: true, status: "next" },
   { round: 18, name: "United States Grand Prix", nameZh: "美国大奖赛", circuit: "Circuit of the Americas", dateStart: "2026-10-23", dateEnd: "2026-10-25", isSprint: true, status: "upcoming" },
   { round: 19, name: "Mexico City Grand Prix", nameZh: "墨西哥大奖赛", circuit: "Autódromo Hermanos Rodríguez", dateStart: "2026-10-30", dateEnd: "2026-11-01", isSprint: false, status: "upcoming" },
@@ -65,6 +65,19 @@ export const FIXTURE_LAST_RACE: RaceResultSummary = {
     { position: 2, code: "ANT", name: "基米·安东内利", team: "梅赛德斯车队" },
     { position: 3, code: "RUS", name: "乔治·拉塞尔", team: "梅赛德斯车队" }
   ],
-  pole: { code: "ANT", name: "基米·安东内利" },
-  fastestLap: { code: "VER", name: "马克斯·维斯塔潘", lapTime: "1:34.080" }
+  pole: { code: "VER", name: "马克斯·维斯塔潘", team: "红牛车队 (Red Bull Racing)" },
+  qualifyingP1: { code: "VER", name: "马克斯·维斯塔潘", team: "红牛车队 (Red Bull Racing)" },
+  startingGridP1: { code: "VER", name: "马克斯·维斯塔潘", team: "红牛车队 (Red Bull Racing)" },
+  fastestLap: {
+    code: "VER",
+    name: "马克斯·维斯塔潘",
+    lapTime: "1:38.220",
+    lap: 55,
+    team: "红牛车队 (Red Bull Racing)"
+  },
+  sourceUrls: {
+    raceResult: "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result",
+    qualifying: "https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying",
+    fastestLaps: "https://www.formula1.com/en/results/2026/races/1308/bahrain/fastest-laps"
+  }
 };

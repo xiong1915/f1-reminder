@@ -7,9 +7,10 @@ import { RaceStateService } from '@/lib/f1/race-state';
 interface CountdownProps {
   targetUtcMs: number;
   serverTimeMs?: number;
+  isInProgress?: boolean;
 }
 
-export function Countdown({ targetUtcMs, serverTimeMs }: CountdownProps) {
+export function Countdown({ targetUtcMs, serverTimeMs, isInProgress }: CountdownProps) {
   // 消除客户端与服务端的本地时钟偏差
   const [skew] = useState(() => (serverTimeMs ? Date.now() - serverTimeMs : 0));
   const [delta, setDelta] = useState(() => RaceStateService.calculateCountdown(targetUtcMs, Date.now() - skew));
@@ -26,7 +27,13 @@ export function Countdown({ targetUtcMs, serverTimeMs }: CountdownProps) {
   }, [targetUtcMs, skew]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'clamp(6px, 1.8vw, 16px)', textAlign: 'center', margin: '24px 0' }}>
+    <div>
+      {isInProgress && (
+        <div style={{ fontSize: '11px', color: '#ff453a', fontWeight: 700, letterSpacing: '0.06em', textAlign: 'center', marginBottom: '8px' }}>
+          ● 正在进行中 · 预计剩余时间
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'clamp(6px, 1.8vw, 16px)', textAlign: 'center', margin: isInProgress ? '8px 0 24px' : '24px 0' }}>
       <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: 'clamp(10px, 2vw, 16px) 4px', borderRadius: '12px', border: '1px solid var(--line-dark)' }}>
         <div className="tabular-nums" style={{ fontSize: 'clamp(24px, 4vw, 44px)', fontWeight: 800, color: 'var(--text-primary)' }}>
           {delta.days}
@@ -55,5 +62,6 @@ export function Countdown({ targetUtcMs, serverTimeMs }: CountdownProps) {
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.04em', marginTop: '4px' }}>秒</div>
       </div>
     </div>
-  );
+  </div>
+);
 }

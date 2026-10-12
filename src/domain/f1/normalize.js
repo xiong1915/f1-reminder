@@ -32,7 +32,7 @@ const TEAM_TRANSLATIONS = {
 };
 
 const CIRCUIT_SPECS = {
-  'marina_bay': { lengthKm: '4.940', laps: 62, lapRecord: '1:34.486', turns: '19 (12左 / 7右)' },
+  'marina_bay': { lengthKm: '4.927', laps: 62, lapRecord: '1:33.808 (丹尼尔·里卡多，2024)', turns: '19 (12左 / 7右)' },
   'sepang': { lengthKm: '5.543', laps: 56, lapRecord: '1:34.080', turns: '15 (5左 / 10右)' },
   'baku': { lengthKm: '6.003', laps: 51, lapRecord: '1:43.009', turns: '20 (8左 / 12右)' },
   'monza': { lengthKm: '5.793', laps: 53, lapRecord: '1:21.046', turns: '11 (4左 / 7右)' },

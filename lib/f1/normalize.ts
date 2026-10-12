@@ -1,7 +1,16 @@
 // lib/f1/normalize.ts
 // 统一数据归一化器：将第三方原始数据清洗并映射为中文 Canonical 领域模型
 
-import { F1Meeting, F1Session, DriverStanding, ConstructorStanding, RaceResultSummary } from './types';
+import {
+  F1Meeting,
+  F1Session,
+  DriverStanding,
+  ConstructorStanding,
+  RaceResultSummary,
+  DetailedRaceResultItem,
+  DetailedQualifyingResultItem,
+  DetailedSprintResultItem
+} from './types';
 
 export const DRIVER_TRANSLATIONS: Record<string, { zh: string; fullZh: string; natZh: string }> = {
   'ANT': { zh: '基米·安东内利', fullZh: '基米·安东内利 (Kimi Antonelli)', natZh: '意大利' },
@@ -192,7 +201,7 @@ export const RACE_NAME_TRANSLATIONS: Record<string, string> = {
   'Las Vegas Grand Prix': '拉斯维加斯大奖赛',
   'Qatar Grand Prix': '卡塔尔大奖赛',
   'Abu Dhabi Grand Prix': '阿布扎比大奖赛',
-  'Bahrain Grand Prix in Malaysia': '马来西亚特别大奖赛'
+  'Bahrain Grand Prix in Malaysia': '巴林大奖赛（马来西亚站）'
 };
 
 export const CIRCUIT_NAME_TRANSLATIONS: Record<string, string> = {
@@ -225,7 +234,7 @@ export const CIRCUIT_NAME_TRANSLATIONS: Record<string, string> = {
 };
 
 export const CIRCUIT_SPECS: Record<string, { lengthKm: string; laps: number; lapRecord: string; turns: string }> = {
-  'marina_bay': { lengthKm: '4.940', laps: 62, lapRecord: '1:34.486', turns: '19 (12左 / 7右)' },
+  'marina_bay': { lengthKm: '4.927', laps: 62, lapRecord: '1:33.808 (刘易斯·汉密尔顿，2025)', turns: '19 (12左 / 7右)' },
   'sepang': { lengthKm: '5.543', laps: 56, lapRecord: '1:34.080', turns: '15 (5左 / 10右)' },
   'baku': { lengthKm: '6.003', laps: 51, lapRecord: '1:43.009', turns: '20 (8左 / 12右)' },
   'monza': { lengthKm: '5.793', laps: 53, lapRecord: '1:21.046', turns: '11 (4左 / 7右)' },
@@ -305,12 +314,13 @@ export function normalizeJolpicaRace(r: any): F1Meeting {
   }
 
   if (r.Qualifying) {
+    const qualiTime = r.Qualifying.time;
     sessions.push({
       id: `quali-${round}`,
       name: '大奖赛排位赛 (Quali)',
       nameEn: 'Qualifying',
       type: 'qualifying',
-      startTimeUTC: makeIso(r.Qualifying.date, r.Qualifying.time),
+      startTimeUTC: makeIso(r.Qualifying.date, qualiTime),
       durationMinutes: 60
     });
   }
@@ -325,8 +335,11 @@ export function normalizeJolpicaRace(r: any): F1Meeting {
     durationMinutes: 120
   });
 
-  const rawRaceName = r.raceName || '';
-  const nameZh = RACE_NAME_TRANSLATIONS[rawRaceName] || `${locality}大奖赛`;
+  const rawRaceName = r.raceName || r.name || '';
+  let nameZh = RACE_NAME_TRANSLATIONS[rawRaceName] || r.nameZh || `${locality}大奖赛`;
+  if (String(r.season) === '2026' && circuitId === 'sepang' && /Bahrain|Malaysia/.test(rawRaceName)) {
+    nameZh = '巴林大奖赛（马来西亚站）';
+  }
 
   return {
     meetingId: `${r.season || '2026'}-${circuitId || round}`,
@@ -335,7 +348,7 @@ export function normalizeJolpicaRace(r: any): F1Meeting {
     name: rawRaceName,
     nameZh,
     country,
-    locality,
+    locality: circuitId === 'sepang' ? '吉隆坡' : locality,
     circuitId,
     circuitName,
     raceStartUTC,
@@ -345,7 +358,7 @@ export function normalizeJolpicaRace(r: any): F1Meeting {
   };
 }
 
-export function normalizeJolpicaDriverStandings(list: any[]): DriverStanding[] {
+export function normalizeJolpicaDriverStandings(list: any[], round?: number): DriverStanding[] {
   let leaderPoints = 0;
   return list.map((item, idx) => {
     const code = (item.Driver?.code || 'UNK').toUpperCase();
@@ -374,12 +387,13 @@ export function normalizeJolpicaDriverStandings(list: any[]): DriverStanding[] {
       teamId: teamKey,
       points,
       wins: parseInt(item.wins, 10) || 0,
-      gap: idx === 0 ? 0 : points - leaderPoints
+      gap: idx === 0 ? 0 : points - leaderPoints,
+      officialRound: round
     };
   });
 }
 
-export function normalizeJolpicaConstructorStandings(list: any[]): ConstructorStanding[] {
+export function normalizeJolpicaConstructorStandings(list: any[], round?: number): ConstructorStanding[] {
   let leaderPoints = 0;
   return list.map((item, idx) => {
     const teamKey = item.Constructor?.constructorId || '';
@@ -395,10 +409,40 @@ export function normalizeJolpicaConstructorStandings(list: any[]): ConstructorSt
       nameEn: item.Constructor?.name || teamName,
       points,
       wins: parseInt(item.wins, 10) || 0,
-      gap: idx === 0 ? 0 : points - leaderPoints
+      gap: idx === 0 ? 0 : points - leaderPoints,
+      officialRound: round
     };
   });
 }
+
+export interface OfficialRaceResultsUrls {
+  raceId: string;
+  slug: string;
+  raceResult: string;
+  qualifying?: string;
+  fastestLaps?: string;
+  startingGrid?: string;
+}
+
+// 经过权威核验的官方分站结果映射表（严禁凭 round 或 meetingId 任意猜测 officialRaceId）
+export const OFFICIAL_F1_RESULTS_REGISTRY: Record<string, OfficialRaceResultsUrls> = {
+  '2026-16': {
+    raceId: '1308',
+    slug: 'bahrain',
+    raceResult: 'https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result',
+    qualifying: 'https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying',
+    fastestLaps: 'https://www.formula1.com/en/results/2026/races/1308/bahrain/fastest-laps',
+    startingGrid: 'https://www.formula1.com/en/results/2026/races/1308/bahrain/starting-grid'
+  },
+  '2026-17': {
+    raceId: '1309',
+    slug: 'singapore',
+    raceResult: 'https://www.formula1.com/en/results/2026/races/1309/singapore/race-result',
+    qualifying: 'https://www.formula1.com/en/results/2026/races/1309/singapore/qualifying',
+    fastestLaps: 'https://www.formula1.com/en/results/2026/races/1309/singapore/fastest-laps',
+    startingGrid: 'https://www.formula1.com/en/results/2026/races/1309/singapore/starting-grid'
+  }
+};
 
 export function normalizeJolpicaLastResult(race: any): RaceResultSummary {
   const winnerItem = race.Results?.[0];
@@ -416,26 +460,202 @@ export function normalizeJolpicaLastResult(race: any): RaceResultSummary {
     };
   });
 
-  const rawRaceName = race.raceName || '';
-  const nameZh = RACE_NAME_TRANSLATIONS[rawRaceName] || `${race.Circuit?.Location?.locality || '国际'}大奖赛`;
-  const rawLoc = race.Circuit?.Location?.locality || '国际赛道';
-  const localityZh = LOCALITY_TRANSLATIONS[rawLoc] || rawLoc;
+  const rawRaceName = race.raceName || race.name || '';
+  let nameZh = RACE_NAME_TRANSLATIONS[rawRaceName] || race.nameZh || `${race.Circuit?.Location?.locality || '国际'}大奖赛`;
+  const rawLoc = race.Circuit?.Location?.locality || race.locality || '国际赛道';
+  let localityZh = LOCALITY_TRANSLATIONS[rawLoc] || rawLoc;
 
-  const winnerCode = (winnerItem?.Driver?.code || 'VER').toUpperCase();
+  const winnerCode = (winnerItem?.Driver?.code || race.winner?.code || 'UNK').toUpperCase();
   const winnerId = (winnerItem?.Driver?.driverId || '').toLowerCase();
-  const winnerName = DRIVER_TRANSLATIONS[winnerCode]?.zh || DRIVER_BY_ID[winnerId]?.zh || `${winnerItem?.Driver?.givenName} ${winnerItem?.Driver?.familyName}` || '分站冠军';
+  const winnerName = DRIVER_TRANSLATIONS[winnerCode]?.zh || DRIVER_BY_ID[winnerId]?.zh || (winnerItem?.Driver ? `${winnerItem.Driver.givenName} ${winnerItem.Driver.familyName}` : (race.winner?.name || '分站冠军'));
+
+  // 1. 发车位第一 (startingGridP1): 从 RaceResults 中解析 grid === 1
+  let startingGridP1: { code: string; name: string; team?: string } | undefined = undefined;
+  const grid1Item = (race.Results || []).find((r: any) => String(r.grid) === '1');
+  if (grid1Item) {
+    const pCode = (grid1Item.Driver?.code || '').toUpperCase();
+    const pId = (grid1Item.Driver?.driverId || '').toLowerCase();
+    const pName = DRIVER_TRANSLATIONS[pCode]?.zh || DRIVER_BY_ID[pId]?.zh || `${grid1Item.Driver?.givenName} ${grid1Item.Driver?.familyName}`;
+    startingGridP1 = {
+      code: pCode,
+      name: pName,
+      team: TEAM_TRANSLATIONS[grid1Item.Constructor?.constructorId] || grid1Item.Constructor?.name || ''
+    };
+  } else if (race.startingGridP1) {
+    startingGridP1 = race.startingGridP1;
+  }
+
+  // 2. 排位赛第一 (qualifyingP1): 从 QualifyingResults 中解析 position === 1
+  let qualifyingP1: { code: string; name: string; team?: string; time?: string } | undefined = undefined;
+  const quali1Item = (race.QualifyingResults || []).find((q: any) => String(q.position) === '1');
+  if (quali1Item) {
+    const qCode = (quali1Item.Driver?.code || '').toUpperCase();
+    const qId = (quali1Item.Driver?.driverId || '').toLowerCase();
+    const qName = DRIVER_TRANSLATIONS[qCode]?.zh || DRIVER_BY_ID[qId]?.zh || `${quali1Item.Driver?.givenName} ${quali1Item.Driver?.familyName}`;
+    qualifyingP1 = {
+      code: qCode,
+      name: qName,
+      team: TEAM_TRANSLATIONS[quali1Item.Constructor?.constructorId] || quali1Item.Constructor?.name || '',
+      time: quali1Item.Q3 || quali1Item.Q2 || quali1Item.Q1
+    };
+  } else if (race.qualifyingP1) {
+    qualifyingP1 = race.qualifyingP1;
+  }
+
+  // 3. 杆位得主 (pole): 只有在官方明确核实或具备完整排位赛数据时确认
+  // 若目前只能取得发车位置且未核实排位结果，不伪装成 pole
+  let pole: { code: string; name: string; team?: string } | undefined = undefined;
+  if (race.pole) {
+    pole = race.pole;
+  } else if (qualifyingP1) {
+    pole = { code: qualifyingP1.code, name: qualifyingP1.name, team: qualifyingP1.team };
+  }
+
+  // 4. 最快圈速 (fastestLap): 严格从 Results 中解析 FastestLap.rank === '1'
+  // 必须读取实际圈速，严禁在缺失时采用赛道历史纪录(1:34.080)冒充
+  let fastestLap: { code: string; name: string; lapTime: string; lap?: number | string; team?: string } | undefined = undefined;
+  const fastestItem = (race.Results || []).find((r: any) => String(r.FastestLap?.rank) === '1');
+  if (fastestItem) {
+    const fCode = (fastestItem.Driver?.code || '').toUpperCase();
+    const fId = (fastestItem.Driver?.driverId || '').toLowerCase();
+    const fName = DRIVER_TRANSLATIONS[fCode]?.zh || DRIVER_BY_ID[fId]?.zh || `${fastestItem.Driver?.givenName} ${fastestItem.Driver?.familyName}`;
+    const actualLapTime = fastestItem.FastestLap?.Time?.time;
+    if (actualLapTime) {
+      fastestLap = {
+        code: fCode,
+        name: fName,
+        lapTime: actualLapTime,
+        lap: fastestItem.FastestLap?.lap,
+        team: TEAM_TRANSLATIONS[fastestItem.Constructor?.constructorId] || fastestItem.Constructor?.name || ''
+      };
+    }
+  } else if (race.fastestLap?.lapTime) {
+    fastestLap = race.fastestLap;
+  }
+
+  // 5. 官方结果链接映射与特殊分站核准数据
+  const roundNum = parseInt(String(race.round), 10);
+  const seasonStr = String(race.season || '2026');
+  const roundKey = `${seasonStr}-${roundNum}`;
+  const verifiedUrls = OFFICIAL_F1_RESULTS_REGISTRY[roundKey];
+
+  if (seasonStr === '2026' && (race.Circuit?.circuitId === 'sepang' || rawRaceName.includes('Malaysia'))) {
+    nameZh = '巴林大奖赛（马来西亚站）';
+    localityZh = '吉隆坡';
+  }
+
+  const sourceUrls = verifiedUrls ? {
+    raceResult: verifiedUrls.raceResult,
+    qualifying: verifiedUrls.qualifying,
+    startingGrid: verifiedUrls.startingGrid,
+    fastestLaps: verifiedUrls.fastestLaps
+  } : (race.sourceUrls || undefined);
+
+  const officialUrl = verifiedUrls?.raceResult ||
+    ((race.officialUrl && race.officialUrl.includes('formula1.com/en/results/')) ? race.officialUrl : undefined);
 
   return {
-    round: parseInt(race.round, 10),
-    season: String(race.season),
+    round: roundNum,
+    season: seasonStr,
     name: nameZh,
     locality: localityZh,
     date: race.date,
     winner: {
       code: winnerCode,
       name: winnerName,
-      team: TEAM_TRANSLATIONS[winnerItem?.Constructor?.constructorId] || 'F1 车队'
+      team: TEAM_TRANSLATIONS[winnerItem?.Constructor?.constructorId] || race.winner?.team || 'F1 车队'
     },
-    podium
+    podium,
+    pole,
+    qualifyingP1,
+    startingGridP1,
+    fastestLap,
+    officialUrl,
+    sourceUrls
   };
 }
+
+export function normalizeJolpicaRaceResultsList(raceData: any): DetailedRaceResultItem[] {
+  const results = raceData?.Results || [];
+  return results.map((r: any) => {
+    const code = (r.Driver?.code || '').toUpperCase();
+    const driverId = (r.Driver?.driverId || '').toLowerCase();
+    const dTrans = DRIVER_TRANSLATIONS[code] || DRIVER_BY_ID[driverId];
+    const driverName = dTrans?.zh || `${r.Driver?.givenName || ''} ${r.Driver?.familyName || ''}`.trim() || '未知车手';
+    const cId = (r.Constructor?.constructorId || '').toLowerCase();
+    const constructorName = TEAM_TRANSLATIONS[cId] || r.Constructor?.name || '未知车队';
+
+    return {
+      position: parseInt(r.position, 10) || 0,
+      driverId,
+      driverName,
+      driverCode: code,
+      driverNumber: r.number || r.Driver?.permanentNumber,
+      constructorName,
+      constructorId: cId,
+      grid: parseInt(r.grid, 10) || 0,
+      laps: parseInt(r.laps, 10) || 0,
+      status: r.status || 'Finished',
+      points: parseFloat(r.points) || 0,
+      time: r.Time?.time,
+      fastestLap: r.FastestLap ? {
+        rank: r.FastestLap.rank,
+        lap: parseInt(r.FastestLap.lap, 10) || 0,
+        time: r.FastestLap.Time?.time || ''
+      } : undefined
+    };
+  });
+}
+
+export function normalizeJolpicaQualifyingResultsList(raceData: any): DetailedQualifyingResultItem[] {
+  const results = raceData?.QualifyingResults || [];
+  return results.map((r: any) => {
+    const code = (r.Driver?.code || '').toUpperCase();
+    const driverId = (r.Driver?.driverId || '').toLowerCase();
+    const dTrans = DRIVER_TRANSLATIONS[code] || DRIVER_BY_ID[driverId];
+    const driverName = dTrans?.zh || `${r.Driver?.givenName || ''} ${r.Driver?.familyName || ''}`.trim() || '未知车手';
+    const cId = (r.Constructor?.constructorId || '').toLowerCase();
+    const constructorName = TEAM_TRANSLATIONS[cId] || r.Constructor?.name || '未知车队';
+
+    return {
+      position: parseInt(r.position, 10) || 0,
+      driverId,
+      driverName,
+      driverCode: code,
+      driverNumber: r.number || r.Driver?.permanentNumber,
+      constructorName,
+      constructorId: cId,
+      q1: r.Q1,
+      q2: r.Q2,
+      q3: r.Q3
+    };
+  });
+}
+
+export function normalizeJolpicaSprintResultsList(raceData: any): DetailedSprintResultItem[] {
+  const results = raceData?.SprintResults || [];
+  return results.map((r: any) => {
+    const code = (r.Driver?.code || '').toUpperCase();
+    const driverId = (r.Driver?.driverId || '').toLowerCase();
+    const dTrans = DRIVER_TRANSLATIONS[code] || DRIVER_BY_ID[driverId];
+    const driverName = dTrans?.zh || `${r.Driver?.givenName || ''} ${r.Driver?.familyName || ''}`.trim() || '未知车手';
+    const cId = (r.Constructor?.constructorId || '').toLowerCase();
+    const constructorName = TEAM_TRANSLATIONS[cId] || r.Constructor?.name || '未知车队';
+
+    return {
+      position: parseInt(r.position, 10) || 0,
+      driverId,
+      driverName,
+      driverCode: code,
+      driverNumber: r.number || r.Driver?.permanentNumber,
+      constructorName,
+      constructorId: cId,
+      grid: parseInt(r.grid, 10) || 0,
+      laps: parseInt(r.laps, 10) || 0,
+      status: r.status || 'Finished',
+      points: parseFloat(r.points) || 0,
+      time: r.Time?.time
+    };
+  });
+}
+

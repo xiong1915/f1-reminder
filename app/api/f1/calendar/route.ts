@@ -1,22 +1,27 @@
 // app/api/f1/calendar/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { defaultF1Service } from '@/providers/f1/service';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const season = req.nextUrl.searchParams.get('season') || String(new Date().getUTCFullYear());
+  if (!/^\d{4}$/.test(season) || Number(season) < 1950 || Number(season) > new Date().getUTCFullYear() + 1) return NextResponse.json({ error: 'Invalid season' }, { status: 400 });
   try {
-    const calendar = await defaultF1Service.getCalendar('2026');
+    const result = await defaultF1Service.getCalendarResult(season);
+    if (result.source === 'unavailable') return NextResponse.json({ error: '赛历数据源暂不可用', season }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    const calendar = result.data;
     return NextResponse.json({
-      season: '2026',
+      season,
       totalRounds: calendar.length,
-      races: calendar
+      races: calendar,
+      dataSource: result.source, updatedAt: result.fetchedAt, isStale: result.isStale
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+        'Cache-Control': 'no-store'
       }
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Unable to load F1 data' }, { status: 500 });
   }
 }

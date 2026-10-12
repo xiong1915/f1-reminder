@@ -42,6 +42,7 @@ export default function AIPage() {
   const [streamingSources, setStreamingSources] = useState<AISource[]>([]);
   const [streamingFactCard, setStreamingFactCard] = useState<AIFactCard | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastFailedInput, setLastFailedInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -157,7 +158,10 @@ export default function AIPage() {
 
       if (res.status === 429) {
         setStatus('rate_limited');
-        throw new Error('请求过于频繁，请稍候再试 (Rate Limited)');
+        const retryAfter = res.headers.get('Retry-After') || '60';
+        const errJson = await res.json().catch(() => null);
+        const reason = errJson?.error || '请求过于频繁，请稍候再试';
+        throw new Error(`${reason} (请等待 ${retryAfter} 秒)`);
       }
 
       if (!res.ok) {
@@ -233,9 +237,11 @@ export default function AIPage() {
       } else if (!navigator.onLine) {
         setStatus('offline');
         setErrorMessage('网络已断开，请检查网络连接');
+        setLastFailedInput(q);
       } else {
         setStatus('error');
         setErrorMessage(err.message || '请求超时或连接失败');
+        setLastFailedInput(q);
       }
     } finally {
       abortControllerRef.current = null;
@@ -252,6 +258,17 @@ export default function AIPage() {
       }
     }
   }, [sendMessage]);
+
+  // 恢复失败前提问内容至输入框
+  const handleRestoreInput = () => {
+    if (lastFailedInput) {
+      setInput(lastFailedInput);
+      setLastFailedInput(null);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
 
   // 重试最近一次提问
   const handleRetry = () => {
@@ -304,7 +321,7 @@ export default function AIPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span className="badge-pill badge-red" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                FIA 官方数据基准
+                官方赛历与积分
               </span>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 深度赛车策略 · 2026 赛季
@@ -322,7 +339,7 @@ export default function AIPage() {
               </GlassButton>
             )}
             <Link href="/system" style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '6px 10px' }}>
-              拓扑状态
+              连接状态
             </Link>
           </div>
         </div>
@@ -438,7 +455,7 @@ export default function AIPage() {
 
               {m.sources && m.sources.length > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', maxWidth: '88%', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700 }}>溯源权威:</span>
+                  <span style={{ fontWeight: 700 }}>数据溯源:</span>
                   {m.sources.map((s, sIdx) => (
                     <span key={sIdx} style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
                       {s.url ? (
@@ -510,10 +527,12 @@ export default function AIPage() {
 
               {streamingSources.length > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  <span style={{ fontWeight: 700 }}>实时溯源:</span>
+                  <span style={{ fontWeight: 700 }}>数据溯源:</span>
                   {streamingSources.map((s, sIdx) => (
                     <span key={sIdx} style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
-                      {s.name}
+                      {s.url ? (
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-cyan)' }}>{s.name} ↗</a>
+                      ) : s.name}
                     </span>
                   ))}
                 </div>
@@ -533,13 +552,22 @@ export default function AIPage() {
                 fontSize: '13px',
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}
             >
               <span>{errorMessage}</span>
-              <GlassButton variant="primary" size="sm" onClick={handleRetry}>
-                重试
-              </GlassButton>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {lastFailedInput && (
+                  <GlassButton variant="ghost" size="sm" onClick={handleRestoreInput}>
+                    恢复输入
+                  </GlassButton>
+                )}
+                <GlassButton variant="primary" size="sm" onClick={handleRetry}>
+                  重试
+                </GlassButton>
+              </div>
             </div>
           )}
 
@@ -605,7 +633,7 @@ export default function AIPage() {
             </div>
           </GlassComposer>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '6px' }}>
-            AI 生成内容仅供参考 · 事实数据基于 2026 FIA 官方权威规程
+            AI 回答可能有误，请以所附官方来源为准
           </div>
         </div>
       </div>

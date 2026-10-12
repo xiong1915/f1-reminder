@@ -6,6 +6,10 @@ export interface SearchResultItem {
   url: string;
   snippet: string;
   source: string;
+  content?: string;
+  hasFullText?: boolean;
+  isOfficial?: boolean;
+  sourceType?: string;
 }
 
 export interface SearchResponse {
@@ -18,5 +22,5 @@ export interface SearchResponse {
 export interface SearchProvider {
   id: string;
   name: string;
-  search(query: string): Promise<SearchResponse>;
+  search(query: string, signal?: AbortSignal): Promise<SearchResponse>;
 }

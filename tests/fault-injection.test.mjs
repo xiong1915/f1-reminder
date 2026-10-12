@@ -16,7 +16,8 @@ test('Fault Injection 1 — Jolpica Upstream Timeout gracefully falls back to LK
   const cache = new MemoryCacheStore();
   const lkg = new LastKnownGoodStore();
   
-  // Seed LKG with known good calendar
+  // Seed LKG with known good calendar in isolated test season
+  const testSeason = '2099_fault_test';
   await lkg.save('calendar', [
     {
       round: 1,
@@ -25,12 +26,12 @@ test('Fault Injection 1 — Jolpica Upstream Timeout gracefully falls back to LK
       raceStartUTC: '2026-03-15T04:00:00Z',
       sessions: []
     }
-  ], 'fault_test', '2026');
+  ], 'fault_test', testSeason);
 
   const f1Service = new F1Service(cache, lkg);
 
   // When Jolpica network fails, service must return LKG snapshot rather than crashing
-  const calendar = await f1Service.getCalendar('2026');
+  const calendar = await f1Service.getCalendar(testSeason);
   assert.ok(Array.isArray(calendar), 'Calendar must be an array');
   assert.ok(calendar.length > 0, 'Calendar should recover from LKG store');
   assert.equal(calendar[0].circuitId, 'albert_park');

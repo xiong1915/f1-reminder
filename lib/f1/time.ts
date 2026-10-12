@@ -18,7 +18,7 @@ export interface TimeParts {
  * 安全解析时间并提取 Asia/Shanghai 时区的确定性数字与星期部件
  * 杜绝任何因为 Intl 混合输出而导致的“10月月11日日”重复字符问题
  */
-export function extractBeijingParts(input: string | number | Date): TimeParts | null {
+export function extractBeijingParts(input?: string | number | Date | null): TimeParts | null {
   if (input === null || input === undefined || input === '') return null;
   if (typeof input === 'number' && isNaN(input)) return null;
   const d = input instanceof Date ? input : new Date(input);
@@ -62,7 +62,7 @@ export function extractBeijingParts(input: string | number | Date): TimeParts | 
 /**
  * 格式化为标准日期：例如 "2026年10月09日" 或 "10月09日"
  */
-export function formatDate(input: string | number | Date, includeYear: boolean = true): string {
+export function formatDate(input?: string | number | Date | null, includeYear: boolean = true): string {
   const parts = extractBeijingParts(input);
   if (!parts) return '待定';
   return includeYear ? `${parts.year}年${parts.month}月${parts.day}日` : `${parts.month}月${parts.day}日`;
@@ -71,7 +71,7 @@ export function formatDate(input: string | number | Date, includeYear: boolean =
 /**
  * 格式化为时间：例如 "20:00"
  */
-export function formatTime(input: string | number | Date): string {
+export function formatTime(input?: string | number | Date | null): string {
   const parts = extractBeijingParts(input);
   if (!parts) return '待定';
   return `${parts.hour}:${parts.minute}`;
@@ -80,7 +80,7 @@ export function formatTime(input: string | number | Date): string {
 /**
  * 格式化为日期时间：例如 "2026年10月09日 20:00"
  */
-export function formatDateTime(input: string | number | Date, includeYear: boolean = true): string {
+export function formatDateTime(input?: string | number | Date | null, includeYear: boolean = true): string {
   const parts = extractBeijingParts(input);
   if (!parts) return '时间待定';
   const dateStr = includeYear ? `${parts.year}年${parts.month}月${parts.day}日` : `${parts.month}月${parts.day}日`;
@@ -90,7 +90,7 @@ export function formatDateTime(input: string | number | Date, includeYear: boole
 /**
  * 格式化比赛周末跨度范围：例如 "10月09日 - 10月11日"
  */
-export function formatRaceRange(startInput: string | number | Date, endInput: string | number | Date): string {
+export function formatRaceRange(startInput?: string | number | Date | null, endInput?: string | number | Date | null): string {
   const startParts = extractBeijingParts(startInput);
   const endParts = extractBeijingParts(endInput);
 
@@ -107,7 +107,7 @@ export function formatRaceRange(startInput: string | number | Date, endInput: st
 /**
  * 简洁比赛周末卡片显示（例如：10月09日 周五 20:00）
  */
-export function formatBeijingDisplay(input: string | number | Date): string {
+export function formatBeijingDisplay(input?: string | number | Date | null): string {
   const parts = extractBeijingParts(input);
   if (!parts) return '待定';
   return `${parts.month}月${parts.day}日 ${parts.weekdayShort} ${parts.hour}:${parts.minute}`;

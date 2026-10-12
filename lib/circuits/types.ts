@@ -10,7 +10,9 @@ export interface CircuitLapRecord {
 export interface CircuitMetadata {
   circuitId: string;
   layoutId: string;
-  season: string;
+  season?: string;
+  validFrom?: number;
+  validTo?: number;
   nameEn: string;
   nameZh: string;
   country: string;
@@ -18,12 +20,13 @@ export interface CircuitMetadata {
   lengthKm: number;
   turns: number;
   drsZones: number;
-  lapRecord?: CircuitLapRecord;
+  lapRecord?: CircuitLapRecord | null;
   svgFile: string;
   viewBox: string;
   startFinish: { x: number; y: number };
-  direction: 'clockwise' | 'anti-clockwise';
+  direction?: 'clockwise' | 'anti-clockwise';
   type: 'permanent' | 'street' | 'hybrid';
+  geojsonSource?: string;
 }
 
 export interface CircuitAssetRecord {

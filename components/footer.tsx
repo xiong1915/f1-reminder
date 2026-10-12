@@ -35,9 +35,7 @@ export function Footer() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
               <Link href="/ai" style={{ color: 'var(--text-secondary)' }}>TIKE AI 智能控制台</Link>
-              <Link href="/system" style={{ color: 'var(--text-secondary)' }}>系统遥测与健康状态</Link>
-              <Link href="/api/f1/overview" target="_blank" style={{ color: 'var(--text-muted)' }}>赛季概览接口 (JSON)</Link>
-              <Link href="/api/f1/calendar" target="_blank" style={{ color: 'var(--text-muted)' }}>全赛历接口 (JSON)</Link>
+              <Link href="/#simulator" style={{ color: 'var(--text-secondary)' }}>积分试算工具</Link>
             </div>
           </div>
         </div>

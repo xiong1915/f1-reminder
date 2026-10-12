@@ -17,7 +17,7 @@ export const FALLBACK_2026_CALENDAR = [
   { round: 13, name: "Italian Grand Prix", nameZh: "意大利大奖赛", circuit: "Autodromo Nazionale Monza", dateStart: "2026-09-04", dateEnd: "2026-09-06", isSprint: false, status: "finished" },
   { round: 14, name: "Spanish Grand Prix", nameZh: "西班牙大奖赛", circuit: "Madring Circuit", dateStart: "2026-09-11", dateEnd: "2026-09-13", isSprint: false, status: "finished" },
   { round: 15, name: "Azerbaijan Grand Prix", nameZh: "阿塞拜疆大奖赛", circuit: "Baku City Circuit", dateStart: "2026-09-24", dateEnd: "2026-09-26", isSprint: false, status: "finished" },
-  { round: 16, name: "Bahrain Grand Prix in Malaysia", nameZh: "雪邦特别大奖赛", circuit: "Sepang International Circuit", dateStart: "2026-10-02", dateEnd: "2026-10-04", isSprint: false, status: "finished" },
+  { round: 16, name: "Bahrain Grand Prix in Malaysia", nameZh: "巴林大奖赛（马来西亚站）", circuit: "Sepang International Circuit", dateStart: "2026-10-02", dateEnd: "2026-10-04", isSprint: false, status: "finished" },
   { round: 17, name: "Singapore Grand Prix", nameZh: "新加坡大奖赛", circuit: "Marina Bay Street Circuit", dateStart: "2026-10-09", dateEnd: "2026-10-11", isSprint: true, status: "next" },
   { round: 18, name: "United States Grand Prix", nameZh: "美国大奖赛", circuit: "Circuit of the Americas", dateStart: "2026-10-23", dateEnd: "2026-10-25", isSprint: true, status: "upcoming" },
   { round: 19, name: "Mexico City Grand Prix", nameZh: "墨西哥大奖赛", circuit: "Autódromo Hermanos Rodríguez", dateStart: "2026-10-30", dateEnd: "2026-11-01", isSprint: false, status: "upcoming" },
@@ -48,9 +48,11 @@ export const FALLBACK_2026_CONSTRUCTORS = [
 
 export const FALLBACK_LAST_RACE = {
   round: 16,
+  season: "2026",
   name: "Bahrain Grand Prix in Malaysia",
-  nameZh: "雪邦特别大奖赛",
-  circuitName: "雪邦国际赛道 (Sepang)",
+  nameZh: "巴林大奖赛（马来西亚站）",
+  circuitName: "雪邦国际赛车场 (Sepang)",
+  locality: "吉隆坡",
   date: "2026-10-04",
   winner: {
     code: "VER",
@@ -58,6 +60,11 @@ export const FALLBACK_LAST_RACE = {
     team: "红牛车队 (Red Bull Racing)",
     totalTime: "1:47:14.808 (56 圈)"
   },
+  podium: [
+    { position: 1, code: "VER", name: "马克斯·维斯塔潘", team: "红牛车队 (Red Bull Racing)" },
+    { position: 2, code: "ANT", name: "基米·安东内利", team: "梅赛德斯车队 (Mercedes-AMG)" },
+    { position: 3, code: "HAM", name: "刘易斯·汉密尔顿", team: "法拉利车队 (Scuderia Ferrari)" }
+  ],
   results: [
     { position: 1, code: "VER", driverName: "马克斯·维斯塔潘", teamName: "红牛车队", timeDelta: "1:47:14.808" },
     { position: 2, code: "ANT", driverName: "基米·安东内利", teamName: "梅赛德斯车队", timeDelta: "+2.307" },
@@ -66,14 +73,33 @@ export const FALLBACK_LAST_RACE = {
     { position: 5, code: "HAD", driverName: "伊萨克·哈贾尔", teamName: "红牛车队", timeDelta: "+8.571" }
   ],
   pole: {
-    name: "基米·安东内利 (Kimi Antonelli)",
-    team: "梅赛德斯车队",
-    time: "1:31.285"
+    code: "VER",
+    name: "马克斯·维斯塔潘",
+    team: "红牛车队 (Red Bull Racing)"
+  },
+  qualifyingP1: {
+    code: "VER",
+    name: "马克斯·维斯塔潘",
+    team: "红牛车队 (Red Bull Racing)"
+  },
+  startingGridP1: {
+    code: "VER",
+    name: "马克斯·维斯塔潘",
+    team: "红牛车队 (Red Bull Racing)"
   },
   fastestLap: {
-    name: "马克斯·维斯塔潘 (Max Verstappen)",
-    team: "红牛车队",
-    time: "1:33.914 (第 48 圈)"
+    code: "VER",
+    name: "马克斯·维斯塔潘",
+    lapTime: "1:38.220",
+    lap: 55,
+    team: "红牛车队 (Red Bull Racing)"
+  },
+  officialUrl: "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result",
+  sourceUrls: {
+    raceResult: "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result",
+    qualifying: "https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying",
+    fastestLaps: "https://www.formula1.com/en/results/2026/races/1308/bahrain/fastest-laps",
+    startingGrid: "https://www.formula1.com/en/results/2026/races/1308/bahrain/starting-grid"
   },
   safetyCarDeployments: 1,
   dnfCount: 2
@@ -98,13 +124,13 @@ export const FALLBACK_CURRENT_MEETING = {
     { id: "fp1-17", name: "第一次自由练习 (FP1)", nameEn: "Practice 1", type: "practice", startTimeUTC: "2026-10-09T08:30:00Z", durationMinutes: 60 },
     { id: "sq-17", name: "冲刺排位赛 (SQ)", nameEn: "Sprint Qualifying", type: "sprint_qualifying", startTimeUTC: "2026-10-09T12:30:00Z", durationMinutes: 44 },
     { id: "sprint-17", name: "冲刺赛 (Sprint)", nameEn: "Sprint", type: "sprint", startTimeUTC: "2026-10-10T09:00:00Z", durationMinutes: 60 },
-    { id: "quali-17", name: "大奖赛排位赛 (Quali)", nameEn: "Qualifying", type: "qualifying", startTimeUTC: "2026-10-10T13:00:00Z", durationMinutes: 60 },
+    { id: "quali-17", name: "大奖赛排位赛 (Quali)", nameEn: "Qualifying", type: "qualifying", startTimeUTC: "2026-10-10T13:30:00Z", durationMinutes: 60 },
     { id: "race-17", name: "大奖赛正赛 (Race)", nameEn: "Grand Prix", type: "race", startTimeUTC: "2026-10-11T12:00:00Z", durationMinutes: 120 }
   ],
   specs: {
-    lengthKm: "4.940",
+    lengthKm: "4.927",
     laps: 62,
-    lapRecord: "1:34.486",
+    lapRecord: "1:33.808 (丹尼尔·里卡多，2024)",
     turns: "19 (12左 / 7右)"
   }
 };
@@ -118,7 +144,7 @@ export const F1_CALENDAR_2026 = FALLBACK_2026_CALENDAR.map(c => ({
   country: c.nameZh ? c.nameZh.replace(/大奖赛.*$/, '') : '国际',
   countryCode: c.round === 17 ? 'SGP' : (c.round === 16 ? 'MYS' : 'FIA'),
   details: c.round === 17 
-    ? '10-09 16:30 FP1 / 10-09 20:30 SQ / 10-10 17:00 Sprint / 10-10 21:00 Quali / 10-11 20:00 Race' 
+    ? '10-09 16:30 FP1 / 10-09 20:30 SQ / 10-10 17:00 Sprint / 10-10 21:30 Quali / 10-11 20:00 Race' 
     : `${c.dateStart} 自由练习 / ${c.dateEnd} 大奖赛正赛`
 }));
 

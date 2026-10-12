@@ -7,22 +7,19 @@ export class GdeltSearchProvider implements SearchProvider {
   readonly id = 'gdelt';
   readonly name = 'GDELT Global News';
 
-  async search(query: string = 'world news'): Promise<SearchResponse> {
+  async search(query: string = 'world news', signal?: AbortSignal): Promise<SearchResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
 
     try {
-      let gdeltQ = 'china OR world OR international news';
-      if (query && !/新闻|今天|最新/.test(query)) {
-        gdeltQ = query;
-      }
+      const gdeltQ = query || 'world news';
       const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(gdeltQ)}&mode=artlist&format=json&maxrecords=10&sort=datedesc`;
       const res = await fetch(url, {
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'Mozilla/5.0 TIKE-V3-NewsBot/3.0'
         },
-        signal: controller.signal
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
 
       if (!res.ok) {

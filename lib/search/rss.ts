@@ -7,18 +7,18 @@ export class RssSearchProvider implements SearchProvider {
   readonly id = 'rss';
   readonly name = 'Global RSS Feeds';
 
-  async search(): Promise<SearchResponse> {
+  async search(query: string = '', signal?: AbortSignal): Promise<SearchResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     try {
-      const rssUrl = 'https://feeds.bbci.co.uk/news/world/rss.xml';
+      const rssUrl = /(f1|formula|赛车|大奖赛|车手|汉密尔顿|法拉利)/i.test(query) ? 'https://feeds.bbci.co.uk/sport/formula1/rss.xml' : 'https://feeds.bbci.co.uk/news/world/rss.xml';
       const res = await fetch(rssUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 TIKE-V3-Rss/3.0',
           'Accept': 'application/xml, text/xml, */*'
         },
-        signal: controller.signal
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
 
       if (!res.ok) {
