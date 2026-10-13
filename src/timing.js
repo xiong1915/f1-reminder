@@ -6,6 +6,7 @@
 const WINDOW_STANDARD_MIN = 20.0;
 const WINDOW_STANDARD_MAX = 35.0;
 const WINDOW_CATCHUP_MAX = 20.0;
+const WINDOW_START_MAX_ELAPSED = 10.0; // 开赛后 10 分钟内允许发送开赛提醒
 
 function isStandardWindow(diffMins) {
   return diffMins >= WINDOW_STANDARD_MIN && diffMins <= WINDOW_STANDARD_MAX;
@@ -13,6 +14,10 @@ function isStandardWindow(diffMins) {
 
 function isCatchupWindow(diffMins) {
   return diffMins > 0 && diffMins < WINDOW_CATCHUP_MAX;
+}
+
+function isStartWindow(diffMins) {
+  return diffMins <= 0 && diffMins > -WINDOW_START_MAX_ELAPSED;
 }
 
 function isTimingMatched(diffMins) {
@@ -23,7 +28,10 @@ module.exports = {
   WINDOW_STANDARD_MIN,
   WINDOW_STANDARD_MAX,
   WINDOW_CATCHUP_MAX,
+  WINDOW_START_MAX_ELAPSED,
   isStandardWindow,
   isCatchupWindow,
+  isStartWindow,
   isTimingMatched
 };
+

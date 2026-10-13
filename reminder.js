@@ -17,6 +17,8 @@ const {
   loadHistory,
   saveHistory,
   normalizeHistoryKeys,
+  findHistoryRecord,
+  mergeHistory,
   isSentRecord,
   isUncertainRecord
 } = require('./src/history');
@@ -24,9 +26,12 @@ const {
   WINDOW_STANDARD_MIN,
   WINDOW_STANDARD_MAX,
   WINDOW_CATCHUP_MAX,
+  WINDOW_START_MAX_ELAPSED,
   isStandardWindow,
-  isCatchupWindow
+  isCatchupWindow,
+  isStartWindow
 } = require('./src/timing');
+
 
 const CACHE_MAX_AGE_DAYS = 7; // 本地赛程缓存最大有效期（天），超过该天数的旧缓存拒绝作为灾备使用
 
@@ -66,11 +71,11 @@ function fetchJson(url) {
   });
 }
 
-function postJson(urlStr, payload) {
+function postJson(urlStr, payload, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(urlStr);
     const client = u.protocol === 'https:' ? https : http;
-    const body = Buffer.from(JSON.stringify(payload), 'utf-8');
+    const body = Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload), 'utf-8');
     let hasSentPayload = false;
     let hasReceivedResponse = false;
 
@@ -79,7 +84,8 @@ function postJson(urlStr, payload) {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Length': body.length,
-        'User-Agent': 'F1ReminderBot/1.0'
+        'User-Agent': 'F1ReminderBot/1.0',
+        ...extraHeaders
       }
     }, (res) => {
       hasReceivedResponse = true;
@@ -233,18 +239,47 @@ function parseJsonResponse(channelName, resStr) {
   }
 }
 
+// 可选同步至 Upstash Redis（保持边缘 Worker 与本地/Actions 状态双向一致）
+async function syncRedisDelivery(keys, payload) {
+  const rUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const rToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!rUrl || !rToken || !keys || !keys.length) return;
+  try {
+    const jsonStr = JSON.stringify(payload);
+    await Promise.allSettled(keys.map(k => {
+      return postJson(`${rUrl}/set/${encodeURIComponent(k)}?ex=604800`, jsonStr, {
+        Authorization: `Bearer ${rToken}`
+      });
+    }));
+  } catch (e) {
+    console.warn(`[Redis同步警告] 历史状态写入 Upstash Redis 异常: ${e.message}`);
+  }
+}
+
 // 统一推送分发器
-async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, isCatchUp = false) {
-  const headerTitle = isCatchUp 
-    ? `🏎️ 【即将开赛紧急提醒】仅剩 ${remMin} 分钟` 
-    : `🏎️ F1 比赛开赛提醒 (前30分钟)`;
+async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, isCatchUp = false, phase = 'before') {
+  const isStart = phase === 'start';
+  const headerTitle = isStart
+    ? `🏎️ 【比赛已正式开赛】五盏红灯熄灭`
+    : (isCatchUp 
+      ? `🏎️ 【即将开赛紧急提醒】仅剩 ${remMin} 分钟` 
+      : `🏎️ F1 比赛开赛提醒 (前30分钟)`);
 
-  const title = `🏎️ F1 开赛提醒: ${gpName} - ${sessionName}`;
-  const noteText = isCatchUp 
-    ? `⚠️ 提示：开赛在即（剩余约 ${remMin} 分钟），请立即就位观赛！🏁` 
-    : `🏁 五盏红灯熄灭，精彩即将开赛，请做好观赛准备！`;
+  const title = isStart
+    ? `🏎️ F1 开赛提醒: ${gpName} - ${sessionName} 已开跑`
+    : `🏎️ F1 开赛提醒: ${gpName} - ${sessionName}`;
 
-  const content = `${headerTitle}\n━━━━━━━━━━━━━━━━━━\n🏆 大奖赛：${gpName}\n⏱️ 环节：${sessionName}\n📍 赛道：${locName}\n⏰ 开赛时间：${timeStr} (北京时间)\n⏳ 倒计时：约 ${remMin} 分钟\n━━━━━━━━━━━━━━━━━━\n${noteText}`;
+  const noteText = isStart
+    ? `🏁 五盏红灯熄灭，比赛现已开跑！实际是否延迟，请以现场公告为准。`
+    : (isCatchUp 
+      ? `⚠️ 提示：开赛在即（剩余约 ${remMin} 分钟），请立即就位观赛！🏁` 
+      : `🏁 五盏红灯熄灭，精彩即将开赛，请做好观赛准备！`);
+
+  const timeDesc = isStart
+    ? `⏰ 开赛时间：${timeStr} (北京时间)\n🏁 状态：已到官方赛程开赛时间`
+    : `⏰ 开赛时间：${timeStr} (北京时间)\n⏳ 倒计时：约 ${remMin} 分钟`;
+
+  const content = `${headerTitle}\n━━━━━━━━━━━━━━━━━━\n🏆 大奖赛：${gpName}\n⏱️ 环节：${sessionName}\n📍 赛道：${locName}\n${timeDesc}\n━━━━━━━━━━━━━━━━━━\n${noteText}`;
 
   if (pushKey.includes('open.feishu.cn') || pushKey.includes('larksuite.com')) {
     // 飞书机器人交互式卡片
@@ -253,14 +288,14 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
       card: {
         header: {
           title: { tag: "plain_text", content: headerTitle },
-          template: isCatchUp ? "orange" : "carmine"
+          template: isStart ? "red" : (isCatchUp ? "orange" : "carmine")
         },
         elements: [
           {
             tag: "div",
             text: {
               tag: "lark_md",
-              content: `**🏆 大奖赛**：${gpName}\n**⏱️ 环节**：${sessionName}\n**📍 赛道地点**：${locName}\n**⏰ 开赛时间**：${timeStr} (北京时间)\n**⏳ 倒计时**：约 **${remMin} 分钟**`
+              content: `**🏆 大奖赛**：${gpName}\n**⏱️ 环节**：${sessionName}\n**📍 赛道地点**：${locName}\n**⏰ 开赛时间**：${timeStr} (北京时间)\n${isStart ? '**🏁 状态**：**已到官方赛程开赛时间**' : `**⏳ 倒计时**：约 **${remMin} 分钟**`}`
             }
           },
           {
@@ -278,6 +313,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
       throw new Error(`[飞书] 接口返回业务错误 (code: ${parsed.code || parsed.StatusCode}, msg: ${parsed.msg || parsed.StatusMessage})`);
     }
     console.log('[飞书推送成功]');
+
 
   } else if (pushKey.includes('qyapi.weixin.qq.com')) {
     // 企业微信机器人
@@ -338,7 +374,7 @@ async function sendPush(pushKey, gpName, sessionName, locName, timeStr, remMin, 
 
 
 async function main() {
-  let pushKey = (process.env.PUSH_KEY || '').trim();
+  let pushKey = (process.env.PUSH_KEY || process.env.FEISHU_WEBHOOK_URL || '').trim();
   const configFile = path.join(__dirname, 'config.json');
   if (!pushKey && fs.existsSync(configFile)) {
     try {
@@ -386,12 +422,17 @@ async function main() {
     }
     const triggerCron = process.env.SCHEDULE_CRON || '';
     sessions = plan.sessions.filter(s => 
-      !triggerCron || s.reminder_cron === triggerCron || s.backup_cron === triggerCron
+      !triggerCron ||
+      s.reminder_cron === triggerCron ||
+      s.backup_cron === triggerCron ||
+      s.start_cron === triggerCron ||
+      s.start_backup_cron === triggerCron
     );
     if (!sessions.length) {
       console.log('当前计划无待提醒比赛，不发送消息');
       return;
     }
+
   } else {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -481,7 +522,7 @@ async function main() {
       throw new Error(`无效开赛时间: ${s.session_key || s.session_name}`);
     }
     const diffMins = (st.getTime() - now.getTime()) / (60 * 1000);
-    // 2. 防重唯一键必须绑定具体开赛时间，同一场比赛一旦改期 (date_start 改变) 允许在新时间重新提醒，绝不漏发
+    // 2. 防重唯一键绑定具体开赛时间，同一场比赛一旦改期 (date_start 改变) 允许在新时间按新窗口计算提醒
     const baseId = s.session_key ? `key_${s.session_key}` : `${s.year}_${s.country_name}_${s.session_name}`;
     const key = `${baseId}_${st.getTime()}`;
 
@@ -507,25 +548,32 @@ async function main() {
     console.log('---------------------------------------------');
   }
 
-  if (upcoming.length === 0) {
-    console.log('本赛季无后续未开赛赛程。');
+  const candidatesToCheck = [
+    ...upcoming,
+    ...activeNow.filter(a => isStartWindow(a.diff))
+  ];
+
+  if (candidatesToCheck.length === 0) {
+    console.log('本赛季当前无待提醒赛程 (无处于赛前或开赛窗口的比赛)。');
     return;
   }
 
   // 严格选择尚未开赛的真正“下一场”
-  const nextS = upcoming[0];
-  const nextCn = translateCountry(nextS.session.country_name);
-  const nextSess = translateSession(nextS.session.session_name);
-  const nextLoc = translateLocation(nextS.session.location);
-  const nextTimeStr = new Date(nextS.startTime.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
-  const diffH = Math.floor(nextS.diff / 60);
-  const diffM = Math.floor(nextS.diff % 60);
+  if (upcoming.length > 0) {
+    const nextS = upcoming[0];
+    const nextCn = translateCountry(nextS.session.country_name);
+    const nextSess = translateSession(nextS.session.session_name);
+    const nextLoc = translateLocation(nextS.session.location);
+    const nextTimeStr = new Date(nextS.startTime.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+    const diffH = Math.floor(nextS.diff / 60);
+    const diffM = Math.floor(nextS.diff % 60);
 
-  console.log(`即将到来的下一场赛事: ${nextCn} 大奖赛 - ${nextSess}`);
-  console.log(`赛道地点: ${nextLoc}`);
-  console.log(`开赛时间: ${nextTimeStr} (北京时间)`);
-  console.log(`距开赛还剩: ${diffH} 小时 ${diffM} 分钟 (${nextS.diff.toFixed(1)} 分钟)`);
-  console.log('---------------------------------------------');
+    console.log(`即将到来的下一场赛事: ${nextCn} 大奖赛 - ${nextSess}`);
+    console.log(`赛道地点: ${nextLoc}`);
+    console.log(`开赛时间: ${nextTimeStr} (北京时间)`);
+    console.log(`距开赛还剩: ${diffH} 小时 ${diffM} 分钟 (${nextS.diff.toFixed(1)} 分钟)`);
+    console.log('---------------------------------------------');
+  }
 
   const historyFile = path.join(__dirname, 'history.json');
   const history = normalizeHistoryKeys(loadHistory(historyFile));
@@ -534,7 +582,7 @@ async function main() {
   let uncertainSkippedCount = 0;
   const errors = [];
 
-  for (const item of upcoming) {
+  for (const item of candidatesToCheck) {
     const s = item.session;
     const isMatch = monitoredTypes.some(m => 
       (s.session_type && s.session_type.toLowerCase().includes(m.toLowerCase())) || 
@@ -546,111 +594,165 @@ async function main() {
     const currentNow = Date.now();
     const currentDiff = (item.startTime.getTime() - currentNow) / (60 * 1000);
 
-    // 严格防线：若当前已开赛 (currentDiff <= 0)，坚决放弃发送开赛前提醒
-    if (currentDiff <= 0) {
-      console.log(`[已开赛/已过期，放弃提醒] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)} (已开赛 ${Math.abs(currentDiff).toFixed(1)} 分钟)`);
+    let phase = null;
+    let inStandard = false;
+    let inCatchUp = false;
+
+    if (currentDiff > 0) {
+      inStandard = isStandardWindow(currentDiff);
+      inCatchUp = isCatchupWindow(currentDiff);
+      if (inStandard || inCatchUp) {
+        phase = 'before';
+      }
+    } else if (isStartWindow(currentDiff)) {
+      phase = 'start';
+    }
+
+    // 若未处于赛前提醒或开赛提醒有效窗口内，跳过
+    if (!phase) {
+      if (currentDiff <= -WINDOW_START_MAX_ELAPSED) {
+        console.log(`[已开赛/已过期，放弃提醒] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)} (已开赛 ${Math.abs(currentDiff).toFixed(1)} 分钟)`);
+      }
       continue;
     }
 
-    const inStandard = isStandardWindow(currentDiff);
-    const inCatchUp = isCatchupWindow(currentDiff);
+    const targetKey = phase === 'start' ? `${item.key}:start` : item.key;
 
-    if (inStandard || inCatchUp) {
-      const existing = history[item.key];
-      if (existing) {
-        if (isUncertainRecord(existing)) {
-          console.warn(`::warning file=reminder.js::[待人工确认告警] 场次 ${item.key} (${translateCountry(s.country_name)} - ${translateSession(s.session_name)}) 先前推送状态不确定 (uncertain，尝试于 ${existing.attempted_at || '未知'})。为防重复发送，本次触发已跳过自动推送。`);
-          uncertainSkippedCount++;
-          continue;
-        } else if (isSentRecord(existing)) {
-          console.log(`[已提醒过，跳过重复] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)}`);
-          continue;
-        }
+    // 构造 Redis 格式的备选别名键，确保跨系统平滑去重
+    const roundMatch = s.session_key && String(s.session_key).match(/jolpica_\d+_(\d+)_/);
+    const roundStr = s.round ? String(s.round) : (roundMatch ? roundMatch[1] : null);
+    const seasonStr = String(s.year || now.getFullYear());
+    let sessionType = 'session';
+    const sName = (s.session_name || '').toLowerCase();
+    if (sName.includes('race') || (s.session_type || '').toLowerCase().includes('race')) sessionType = 'race';
+    else if (sName.includes('quali') || (s.session_type || '').toLowerCase().includes('quali')) sessionType = 'quali';
+    else if (sName.includes('sprint') || (s.session_type || '').toLowerCase().includes('sprint')) sessionType = 'sprint';
+    else if (sName.includes('practice 1') || sName.includes('fp1')) sessionType = 'fp1';
+    else if (sName.includes('practice 2') || sName.includes('fp2')) sessionType = 'fp2';
+    else if (sName.includes('practice 3') || sName.includes('fp3')) sessionType = 'fp3';
+
+    const isoStartMs = item.startTime.toISOString(); // e.g. 2026-10-10T13:00:00.000Z
+    const isoStartNoMs = isoStartMs.replace('.000Z', 'Z'); // e.g. 2026-10-10T13:00:00Z
+    const suffix = phase === 'start' ? ':start' : '';
+
+    const candidateKeys = [targetKey];
+    if (roundStr) {
+      candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${sessionType}-${roundStr}:${isoStartMs}${suffix}`);
+      candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${sessionType}-${roundStr}:${isoStartNoMs}${suffix}`);
+      candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${sessionType}:${isoStartMs}${suffix}`);
+      candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${sessionType}:${isoStartNoMs}${suffix}`);
+      if (s.session_key) {
+        candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${s.session_key}:${isoStartMs}${suffix}`);
+        candidateKeys.push(`f1:delivery:${seasonStr}:${roundStr}:${s.session_key}:${isoStartNoMs}${suffix}`);
       }
+    }
 
-      const gp = `${translateCountry(s.country_name)} 大奖赛`;
-      const sn = translateSession(s.session_name);
-      const loc = translateLocation(s.location);
-      const stStr = new Date(item.startTime.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
-      const rem = Math.max(1, Math.round(currentDiff));
+    const sessionContext = {
+      startTimeMs: item.startTime.getTime(),
+      phase
+    };
+    const existing = findHistoryRecord(history, candidateKeys, sessionContext);
 
-      const logType = inCatchUp ? '紧急补发' : '标准开赛前30分钟';
-      console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (实时倒计时: ${rem} 分钟)`);
+    if (existing) {
+      if (isUncertainRecord(existing)) {
+        console.warn(`::warning file=reminder.js::[待人工确认告警] 场次 ${targetKey} (${translateCountry(s.country_name)} - ${translateSession(s.session_name)}) 先前推送状态不确定 (uncertain，尝试于 ${existing.attempted_at || '未知'})。为防重复发送，本次触发已跳过自动推送。`);
+        uncertainSkippedCount++;
+        continue;
+      } else if (isSentRecord(existing)) {
+        console.log(`[已提醒过，跳过重复] ${translateCountry(s.country_name)} - ${translateSession(s.session_name)} (${phase === 'start' ? '开赛提醒' : '赛前提醒'})`);
+        continue;
+      }
+    }
 
-      let pushSuccess = false;
-      let uncertainErr = null;
-      const MAX_PUSH_RETRIES = 3;
-      for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
-        try {
-          await sendPush(pushKey, gp, sn, loc, stStr, rem, inCatchUp);
-          pushSuccess = true;
+    const gp = `${translateCountry(s.country_name)} 大奖赛`;
+    const sn = translateSession(s.session_name);
+    const loc = translateLocation(s.location);
+    const stStr = new Date(item.startTime.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+    const rem = phase === 'start' ? 0 : Math.max(1, Math.round(currentDiff));
+
+    const logType = phase === 'start' ? '开赛提醒' : (inCatchUp ? '紧急补发' : '标准开赛前30分钟');
+    console.log(`>>> [${logType}] 正在向机器人发送通知: ${gp} - ${sn} (实时时间差: ${currentDiff.toFixed(1)} 分钟)`);
+
+    let pushSuccess = false;
+    let uncertainErr = null;
+    const MAX_PUSH_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
+      try {
+        await sendPush(pushKey, gp, sn, loc, stStr, rem, inCatchUp, phase);
+        pushSuccess = true;
+        break;
+      } catch (err) {
+        if (err.deliveryStatus === 'uncertain' || err.isDeliveryUncertain === true || err.isResponseTimeout === true) {
+          console.error(`[推送状态不确定 (Uncertain)] 场次 ${targetKey} 请求体已写出，但在获取完整响应前发生异常: ${err.message}。Node.js HTTP 层无法确认服务端是否已接收或已发送消息。为防群内重复轰炸，放弃自动重试；严禁记为发送成功，该场次已转交 Actions 异常告警。`);
+          uncertainErr = err;
+          errors.push(err);
           break;
-        } catch (err) {
-          // 分类 1: 送达状态不确定 (Uncertain)
-          // 请求体已写出，但在收到服务端完整确认前发生超时、网络中断或流中断。
-          // Node.js HTTP 层无法确认服务端是否已接收或处理该消息。
-          // 为防止可能导致的重复推送轰炸，保守放弃自动重试；
-          // 严禁记为已送达，记入 errors，由 GitHub Actions 异常告警。
-          if (err.deliveryStatus === 'uncertain' || err.isDeliveryUncertain === true || err.isResponseTimeout === true) {
-            console.error(`[推送状态不确定 (Uncertain)] 场次 ${item.key} 请求体已写出，但在获取完整响应前发生异常: ${err.message}。Node.js HTTP 层无法确认服务端是否已接收或已发送消息。为防群内重复轰炸，放弃自动重试；严禁记为发送成功，该场次已转交 Actions 异常告警。`);
-            uncertainErr = err;
-            errors.push(err);
-            break;
-          }
+        }
 
-          // 分类 2 & 3: 明确未送达 (可安全重试) 或 明确收到服务端业务失败响应
-          if (attempt < MAX_PUSH_RETRIES) {
-            const delayMs = attempt * 2000;
-            const retryDesc = err.deliveryStatus === 'not_delivered' ? '明确未送达，执行安全重试' : '收到明确服务失败响应，执行受控重试';
-            console.warn(`[推送重试 ${attempt}/${MAX_PUSH_RETRIES}] 场次 ${item.key} (${retryDesc}): ${err.message}，将在 ${delayMs / 1000}s 后重试...`);
-            await new Promise(r => setTimeout(r, delayMs));
-          } else {
-            console.error(`[推送彻底失败] 场次 ${item.key} 连续 ${MAX_PUSH_RETRIES} 次尝试均失败: ${err.message}`);
-            errors.push(err);
-          }
+        if (attempt < MAX_PUSH_RETRIES) {
+          const delayMs = attempt * 2000;
+          const retryDesc = err.deliveryStatus === 'not_delivered' ? '明确未送达，执行安全重试' : '收到明确服务失败响应，执行受控重试';
+          console.warn(`[推送重试 ${attempt}/${MAX_PUSH_RETRIES}] 场次 ${targetKey} (${retryDesc}): ${err.message}，将在 ${delayMs / 1000}s 后重试...`);
+          await new Promise(r => setTimeout(r, delayMs));
+        } else {
+          console.error(`[推送彻底失败] 场次 ${targetKey} 连续 ${MAX_PUSH_RETRIES} 次尝试均失败: ${err.message}`);
+          errors.push(err);
         }
       }
+    }
 
-      if (pushSuccess) {
-        // 发送成功后立即更新并写入历史磁盘，避免后续意外导致丢失！
-        const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
-        const triggerType = inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup');
-        history[item.key] = {
-          status: 'sent',
-          sent_at: currentBeijingTime,
-          trigger: triggerType,
-          mode: inCatchUp ? 'catch-up' : 'standard',
-          gp, sn, stStr,
-          rem_minutes: rem
-        };
-        saveHistory(historyFile, history);
-        triggeredCount++;
-      } else if (uncertainErr) {
-        // 送达状态不确定 (Uncertain) 持久化：
-        // 关键防护：单独持久化 uncertain / attempted 状态，与 confirmed sent 状态严格区分！
-        // 绝不伪装为 success，不设置 pushSuccess=true，依然保留在 errors 数组并抛错使本次 Actions 报红告警。
-        // 持久化后，后续 backup cron 或补发任务读取 history 时可感知该状态，防止跨任务重复发送！
-        const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
-        const triggerType = inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup');
-        history[item.key] = {
-          status: 'uncertain',
-          attempted_at: currentBeijingTime,
-          trigger: triggerType,
-          mode: inCatchUp ? 'catch-up' : 'standard',
-          gp, sn, stStr,
-          rem_minutes: rem,
-          error: uncertainErr.message
-        };
-        saveHistory(historyFile, history);
-      }
+    if (pushSuccess) {
+      const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+      const triggerType = phase === 'start' ? 'start' : (inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup'));
+      history[targetKey] = {
+        status: 'sent',
+        sent_at: currentBeijingTime,
+        trigger: triggerType,
+        phase: phase,
+        mode: inCatchUp ? 'catch-up' : (phase === 'start' ? 'start' : 'standard'),
+        gp, sn, stStr,
+        rem_minutes: rem
+      };
+      saveHistory(historyFile, history);
+      triggeredCount++;
+      await syncRedisDelivery(candidateKeys, {
+        status: 'sent',
+        sent_at: currentBeijingTime,
+        updatedAt: new Date().toISOString(),
+        source: 'reminder_script',
+        phase: phase
+      });
+    } else if (uncertainErr) {
+      const currentBeijingTime = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+      const triggerType = phase === 'start' ? 'start' : (inCatchUp ? 'catch-up' : (inStandard ? 'primary' : 'backup'));
+      history[targetKey] = {
+        status: 'uncertain',
+        attempted_at: currentBeijingTime,
+        trigger: triggerType,
+        phase: phase,
+        mode: inCatchUp ? 'catch-up' : (phase === 'start' ? 'start' : 'standard'),
+        gp, sn, stStr,
+        rem_minutes: rem,
+        error: uncertainErr.message
+      };
+      saveHistory(historyFile, history);
+      await syncRedisDelivery(candidateKeys, {
+        status: 'uncertain',
+        attempted_at: currentBeijingTime,
+        updatedAt: new Date().toISOString(),
+        source: 'reminder_script',
+        phase: phase,
+        error: uncertainErr.message
+      });
     }
   }
 
   if (triggeredCount > 0) {
     console.log(`本次运行共成功推送并记录 ${triggeredCount} 场赛事提醒。`);
   } else {
-    console.log(`当前无处于开赛前提醒区间 [0~35 分钟] 内的待通知环节。`);
+    console.log(`当前无处于开赛前或开赛提醒区间内的待通知环节。`);
   }
+
 
   if (uncertainSkippedCount > 0) {
     console.warn(`::warning::本次检查发现 ${uncertainSkippedCount} 场赛事先前推送状态为 uncertain，为防重复已跳过自动补发，请人工确认！`);

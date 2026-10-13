@@ -91,6 +91,53 @@ async function main() {
   const hasP6 = data3.reply?.includes('6. **') || data3.reply?.includes('P6');
   console.log(`- 是否被违规扩展为前10名 (含P6): ${hasP6 ? '【异常：包含了P6】' : '【正常：严格仅前5名】'}`);
 
+  // 6. 测试历史积分中心 (2008 & 2023)
+  console.log('\n6. 测试历史积分中心:');
+  const hRes2008 = await fetch(`${BASE_URL}/api/f1/standings?season=2008`);
+  const hData2008 = await hRes2008.json();
+  console.log(`- 2008 赛季积分榜车手榜首: ${hData2008.driverStandings?.[0]?.name} (${hData2008.driverStandings?.[0]?.points}分)`);
+  console.log(`- 2008 赛季车队榜首: ${hData2008.constructorStandings?.[0]?.name} (${hData2008.constructorStandings?.[0]?.points}分)`);
+  console.log(`- 2008 赛季截止描述: "${hData2008.standingsCutoffDesc}", verified: ${hData2008.standingsCutoffVerified}`);
+
+  const hRes2023 = await fetch(`${BASE_URL}/api/f1/standings?season=2023`);
+  const hData2023 = await hRes2023.json();
+  console.log(`- 2023 赛季积分榜车手榜首: ${hData2023.driverStandings?.[0]?.name} (${hData2023.driverStandings?.[0]?.points}分)`);
+
+  // 7. 测试历史赛道构型 (2015 墨尔本 16 弯 - 严禁现代 2022 构型冒充)
+  console.log('\n7. 测试历史赛道构型 (2015 墨尔本):');
+  const trackRes = await fetch(`${BASE_URL}/races/1?season=2015`);
+  const trackHtml = await trackRes.text();
+  const hasMissingLayoutNotice = trackHtml.includes('历史赛道构型暂缺') || trackHtml.includes('暂缺');
+  console.log(`- 2015 墨尔本分站页面状态: HTTP ${trackRes.status}`);
+  console.log(`- 是否展示“历史赛道构型暂缺”明确提示 (禁止现代冒充): ${hasMissingLayoutNotice ? '【正常：如实提示暂缺】' : '【异常：未提示暂缺】'}`);
+
+  // 8. 测试 APEX REPLAY 比赛动态回放与会话
+  console.log('\n8. 测试 APEX REPLAY 回放 API 与 DEMO 隔离:');
+  const replayPageRes = await fetch(`${BASE_URL}/replay`);
+  console.log(`- /replay 页面状态: HTTP ${replayPageRes.status}`);
+  const replayApiRes = await fetch(`${BASE_URL}/api/f1/replay?season=2023`);
+  const replayApiData = await replayApiRes.json();
+  console.log(`- 2023 赛季可用历史正赛场次数量: ${replayApiData.sessions?.length || 0}`);
+  if (replayApiData.sessions?.length) {
+    console.log(`  * 第一场: ${replayApiData.sessions[0].nameZh} (key: ${replayApiData.sessions[0].session_key})`);
+  }
+
+  // 9. 测试 AI 通道一：指定网址直读 (URL 直通解析)
+  console.log('\n9. 测试 AI 通道一: 指定网页直通解析 (无模糊搜索污染)');
+  const targetUrl = 'https://www.formula1.com/en/latest.html';
+  const qDirectUrl = `请阅读此页面并告知其主旨内容：${targetUrl}`;
+  const directUrlRes = await fetch(`${BASE_URL}/api/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: qDirectUrl, stream: false })
+  });
+  const directUrlData = await directUrlRes.json();
+  console.log(`- AI 指定 URL 回复状态: HTTP ${directUrlRes.status}`);
+  console.log(`- Sources 数量: ${directUrlData.sources?.length || 0}`);
+  const urlMatched = (directUrlData.sources || []).some(s => s.url === targetUrl);
+  console.log(`- 是否仅精准指向目标 URL: ${urlMatched ? '【通过：精准指向目标 URL】' : '【未匹配目标 URL】'}`);
+  console.log(`- AI 回答内容摘要:\n${directUrlData.reply?.slice(0, 200)}...\n`);
+
   console.log('\n=== 线上全量复测验证完成 ===');
 }
 

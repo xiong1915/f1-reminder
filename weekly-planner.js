@@ -132,7 +132,7 @@ function jolpicaSessions(races, year) {
     if (!Number.isFinite(Date.parse(start))) throw Error('无效赛程时间');
     return [{session_key:`jolpica_${year}_${r.round}_${field}`,session_type:type,session_name:name,
       date_start:new Date(start).toISOString(),country_name:r.Circuit?.Location?.country,
-      location:r.Circuit?.Location?.locality,year,is_cancelled:false}];
+      location:r.Circuit?.Location?.locality,year,round:r.round,is_cancelled:false}];
   }));
 }
 module.exports = {cronAt, buildPlan, renderWorkflow, jolpicaSessions};

@@ -44,26 +44,108 @@ function saveHistory(file, historyObj) {
   fs.renameSync(tmp, file);
 }
 
-// 兼容已上线的日期字符串键和最早的场次 ID 键，统一到 UTC 毫秒
+// 兼容已上线的日期字符串键和最早的场次 ID 键，统一到 UTC 毫秒 (同时兼容 :start 开赛后缀)
 function normalizeHistoryKeys(history) {
   if (!history || typeof history !== 'object') return history;
   for (const [oldKey, record] of Object.entries(history)) {
-    const match = oldKey.match(/^(.*)_(\d{4}-\d{2}-\d{2}T.*)$/);
-    let baseId, startMs;
+    const match = oldKey.match(/^(.*)_(\d{4}-\d{2}-\d{2}T.*?)(:start)?$/);
+    let baseId, startMs, suffix = '';
     if (match) {
       baseId = match[1];
       startMs = Date.parse(match[2]);
-    } else if (/^\d+$/.test(oldKey) && record && typeof record.stStr === 'string') {
-      baseId = `key_${oldKey}`;
+      suffix = match[3] || '';
+    } else if (/^\d+(:start)?$/.test(oldKey) && record && typeof record.stStr === 'string') {
+      const isStart = oldKey.endsWith(':start');
+      const rawId = isStart ? oldKey.replace(':start', '') : oldKey;
+      baseId = `key_${rawId}`;
       startMs = Date.parse(record.stStr.replace(' ', 'T') + '+08:00');
+      suffix = isStart ? ':start' : '';
     }
     if (baseId && Number.isFinite(startMs)) {
-      const normalizedKey = `${baseId}_${startMs}`;
+      const normalizedKey = `${baseId}_${startMs}${suffix}`;
       if (!history[normalizedKey]) history[normalizedKey] = record;
-      delete history[oldKey];
+      if (normalizedKey !== oldKey) {
+        delete history[oldKey];
+      }
     }
   }
   return history;
+}
+
+// 从键名或 ISO 字符串中提取开赛时间戳（毫秒）
+function extractTimestampFromKey(k) {
+  if (!k || typeof k !== 'string') return null;
+  const clean = k.endsWith(':start') ? k.slice(0, -6) : k;
+  const numMatch = clean.match(/_(\d{12,14})$/);
+  if (numMatch) return Number(numMatch[1]);
+  const parts = clean.split(':');
+  if (parts.length >= 6) {
+    const iso = parts.slice(5).join(':');
+    const t = Date.parse(iso);
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+// 多别名键安全检索记录：支持直接键查、ISO毫秒兼容（.000Z <-> Z）以及基于开赛时间戳与环节的语义级去重
+function findHistoryRecord(history, candidateKeys, sessionContext) {
+  if (!history || typeof history !== 'object') return null;
+  const keys = Array.isArray(candidateKeys) ? candidateKeys : [candidateKeys];
+
+  // 1. 直匹配 candidateKeys
+  for (const k of keys) {
+    if (k && history[k]) return history[k];
+  }
+
+  // 2. 尝试 ISO 毫秒互换匹配 (.000Z <-> Z)
+  for (const k of keys) {
+    if (!k || typeof k !== 'string') continue;
+    let altKey = null;
+    if (k.includes('.000Z')) {
+      altKey = k.replace('.000Z', 'Z');
+    } else if (k.match(/:\d{2}Z/)) {
+      altKey = k.replace(/(:?\d{2})Z/, '$1.000Z');
+    }
+    if (altKey && history[altKey]) return history[altKey];
+  }
+
+  // 3. 语义级时间戳与环节匹配（深度安全兜底，彻底杜绝跨系统键名命名差异导致的重复投递）
+  const targetTimeMs = sessionContext?.startTimeMs || (keys[0] ? extractTimestampFromKey(keys[0]) : null);
+  const targetPhase = sessionContext?.phase || (keys[0] && keys[0].endsWith(':start') ? 'start' : 'before');
+
+  if (Number.isFinite(targetTimeMs)) {
+    for (const record of Object.values(history)) {
+      if (!record || typeof record !== 'object') continue;
+      const recTimeMs = record.start_time_utc ? Date.parse(record.start_time_utc) :
+                        (record.stStr ? Date.parse(record.stStr.replace(' ', 'T') + '+08:00') : null);
+      const recPhase = record.phase || (record.redis_key && record.redis_key.endsWith(':start') ? 'start' : 'before');
+
+      if (Number.isFinite(recTimeMs) && recTimeMs === targetTimeMs && recPhase === targetPhase) {
+        return record;
+      }
+    }
+  }
+
+  return null;
+}
+
+// 安全合并历史记录：绝不覆盖已确认 sent 的记录，绝不丢弃旧记录
+function mergeHistory(existingHistory, newRecords) {
+  const merged = { ...(existingHistory || {}) };
+  if (!newRecords || typeof newRecords !== 'object') return merged;
+
+  for (const [k, v] of Object.entries(newRecords)) {
+    if (!merged[k]) {
+      merged[k] = v;
+    } else {
+      // 若已有记录已被确认为 sent，绝不能被 uncertain 或 pending 覆盖退化
+      if (merged[k].status === 'sent' && v.status !== 'sent') {
+        continue;
+      }
+      merged[k] = { ...merged[k], ...v };
+    }
+  }
+  return merged;
 }
 
 // 判断记录是否为已发送（兼容旧版无 status 字段的 legacy sent 记录）
@@ -82,6 +164,10 @@ module.exports = {
   loadHistory,
   saveHistory,
   normalizeHistoryKeys,
+  extractTimestampFromKey,
+  findHistoryRecord,
+  mergeHistory,
   isSentRecord,
   isUncertainRecord
 };
+

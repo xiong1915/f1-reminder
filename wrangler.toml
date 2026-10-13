@@ -2,13 +2,11 @@ name = "feishu-f1-bot"
 main = "cf_worker.js"
 compatibility_date = "2024-09-23"
 
-[triggers]
-crons = ["*/1 * * * *"]
-
 [vars]
 FEISHU_APP_ID = "cli_aa4fac838bf85bb5"
 DEEPSEEK_MODEL = "deepseek-chat"
-# 敏感凭据（FEISHU_APP_SECRET, DEEPSEEK_API_KEY, TAVILY_API_KEY）请使用 `wrangler secret put <KEY>` 或 Cloudflare 网页后台安全注入
+UPSTREAM_ORIGIN = "https://f1-race-reminder-cloud.vercel.app"
+# 网站反代网关：已彻底移除 crons 触发器。定时提醒由独立的 workers/f1-reminder-worker 负责。
 
 [[kv_namespaces]]
 binding = "KV_CHAT"

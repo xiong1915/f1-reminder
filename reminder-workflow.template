@@ -1,4 +1,7 @@
 name: F1 Race 30-Min Reminder
+# 注意：GitHub Actions 定时为异步次级灾备兜底通道 (Secondary Fallback)，受 Runner 排队影响存在调度延迟；
+# 主准点提醒由 Cloudflare 独立 Worker (f1-reminder-worker) 每分钟 Cron 执行。
+# 工作日 1 小时与周末 15 分钟为心跳检查，遇漏发在合法窗口期内安全补发，不声明排队零延迟的准点保证。
 
 on:
 __SCHEDULE__
@@ -33,30 +36,11 @@ jobs:
         env:
           WEEKLY_PLAN: 'true'
           SCHEDULE_CRON: ${{ github.event.schedule || '' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL || secrets.PUSH_KEY }}
           PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
           TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
-        run: |
-          if [ "${TEST_MODE:-false}" = "true" ]; then
-            node reminder.js
-          else
-            test -n "$CRON_SECRET" || { echo "::error::CRON_SECRET is missing"; exit 1; }
-            curl --fail-with-body --max-time 30 --retry 0 \
-              -H "Authorization: Bearer $CRON_SECRET" \
-              -H "X-Reminder-Source: github" \
-              https://f1.tike69.cc.cd/api/cron/reminder
-          fi
-
-      - name: Refresh website data without notifications
-        if: ${{ always() && github.event.inputs.test_mode != 'true' }}
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          test -n "$CRON_SECRET" || { echo "::error::CRON_SECRET is missing"; exit 1; }
-          curl --silent --show-error --fail --max-time 45 --retry 0 --output /dev/null \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            https://f1.tike69.cc.cd/api/cron/sync
+        run: node reminder.js
 
       - name: Save sent history to repository
         # 即使前序推送报错，也要保存已成功推送的记录与本地拉取的赛程缓存，避免丢失与重复

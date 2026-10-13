@@ -5,8 +5,10 @@ const {
   WINDOW_STANDARD_MIN,
   WINDOW_STANDARD_MAX,
   WINDOW_CATCHUP_MAX,
+  WINDOW_START_MAX_ELAPSED,
   isStandardWindow,
   isCatchupWindow,
+  isStartWindow,
   isTimingMatched
 } = require('../src/timing');
 
@@ -14,6 +16,7 @@ test('Timing: 常量定义保持完全一致', () => {
   assert.strictEqual(WINDOW_STANDARD_MIN, 20.0);
   assert.strictEqual(WINDOW_STANDARD_MAX, 35.0);
   assert.strictEqual(WINDOW_CATCHUP_MAX, 20.0);
+  assert.strictEqual(WINDOW_START_MAX_ELAPSED, 10.0);
 });
 
 test('Timing: 标准 30 分钟窗口边界 [20.0, 35.0] 精确匹配', () => {
@@ -33,6 +36,16 @@ test('Timing: 补发/备用窗口边界 (0, 20.0) 精确匹配', () => {
   assert.strictEqual(isCatchupWindow(20.0), false, '20.0m 为开区间边界，不属于 catch-up (转入 standard)');
 });
 
+test('Timing: 开赛提醒窗口 (-10.0, 0.0] 精确匹配', () => {
+  assert.strictEqual(isStartWindow(0.1), false, '开赛前不属于开赛提醒');
+  assert.strictEqual(isStartWindow(0.0), true, '准点开赛 (0.0m) 命中开赛提醒');
+  assert.strictEqual(isStartWindow(-0.5), true, '开赛 30 秒命中开赛提醒');
+  assert.strictEqual(isStartWindow(-5.0), true, '开赛 5 分钟内命中开赛提醒');
+  assert.strictEqual(isStartWindow(-9.9), true, '开赛 9.9 分钟命中开赛提醒上限');
+  assert.strictEqual(isStartWindow(-10.0), false, '开赛 10 分钟边界不再补发');
+  assert.strictEqual(isStartWindow(-15.0), false, '开赛 15 分钟早已超出窗口');
+});
+
 test('Timing: 综合匹配器 isTimingMatched 覆盖合法提醒区间 (0, 35.0]', () => {
   assert.strictEqual(isTimingMatched(-5), false);
   assert.strictEqual(isTimingMatched(0), false);
@@ -42,3 +55,4 @@ test('Timing: 综合匹配器 isTimingMatched 覆盖合法提醒区间 (0, 35.0]
   assert.strictEqual(isTimingMatched(35), true);
   assert.strictEqual(isTimingMatched(36), false);
 });
+
