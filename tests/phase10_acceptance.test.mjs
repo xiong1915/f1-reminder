@@ -12,7 +12,8 @@ test('Phase 10 专项验收与严谨性核验', async (t) => {
     FEATURE_POINTS_TABLE,
     SPRINT_POINTS_TABLE
   } = await import('../lib/f1/championship.ts');
-  const { defaultF1Service } = await import('../providers/f1/service.ts');
+  const { createFixtureF1Service } = await import('./fixtures/offline-service.mjs');
+  const defaultF1Service = await createFixtureF1Service();
   const {
     normalizeJolpicaRace,
     normalizeJolpicaLastResult,

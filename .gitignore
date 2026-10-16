@@ -30,3 +30,6 @@ scratch_check_*.cjs
 .vercel
 .env*
 *.tsbuildinfo
+
+# Version non-secret Worker deployment configuration.
+!/workers/f1-reminder-worker/wrangler.toml
