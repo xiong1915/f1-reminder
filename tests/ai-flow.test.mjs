@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defaultAIOrchestrator } from '../lib/ai/orchestrator.ts';
-import { defaultF1Service } from '../providers/f1/service.ts';
+import { createFixtureF1Service } from './fixtures/offline-service.mjs';
 
 const ROOT_DIR = process.cwd();
 
@@ -27,7 +27,7 @@ test('Phase 4 — 1. AI Intent Classification & Domain Isolation', () => {
 });
 
 test('Phase 4 — 2. Fact Fast Path (Canonical Core Direct Extraction)', async () => {
-  const overview = await defaultF1Service.getOverview();
+  const overview = await (await createFixtureF1Service()).getOverview();
 
   // Test Next Race Fact Card
   const nextRaceCard = defaultAIOrchestrator.getFactCard('F1_FACTUAL', '下一场比赛几点开赛？', overview);

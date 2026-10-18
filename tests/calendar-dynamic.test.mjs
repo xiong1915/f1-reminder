@@ -3,11 +3,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert';
-import { defaultF1Service } from '../providers/f1/service.ts';
+import { createFixtureF1Service } from './fixtures/offline-service.mjs';
 import { CircuitRegistry } from '../lib/circuits/registry.ts';
 
 test('动态赛历与主键索引质量验证', async (t) => {
-  const calendar = await defaultF1Service.getCalendar('2026');
+  const calendar = await (await createFixtureF1Service()).getCalendar('2026');
 
   await t.test('1. 赛历长度动态计算 (Dynamic Length)', () => {
     assert.ok(Array.isArray(calendar));

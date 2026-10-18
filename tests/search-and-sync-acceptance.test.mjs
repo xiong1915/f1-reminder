@@ -9,6 +9,19 @@ test('AI 联网检索、事实一致性与完赛自动同步专项测试', async
   const { checkUrlSafety } = await import('../lib/search/url_safety.ts');
   const { filterAndRankCandidates } = await import('../lib/search/filter.ts');
   const { defaultF1Service } = await import('../providers/f1/service.ts');
+  const { createFixtureF1Service } = await import('./fixtures/offline-service.mjs');
+  const { defaultSearchService } = await import('../lib/search/service.ts');
+  const fixtureService = await createFixtureF1Service();
+  // Exercise orchestration with fixed upstream inputs; no live search or race API.
+  t.mock.method(defaultF1Service, 'getOverview', fixtureService.getOverview.bind(fixtureService));
+  t.mock.method(defaultF1Service, 'getCalendar', fixtureService.getCalendar.bind(fixtureService));
+  t.mock.method(defaultSearchService, 'search', async (query) => ({
+    success: true, provider: 'test-fixture', results: [{
+      title: query, snippet: query, content: query, hasFullText: true,
+      url: 'https://www.formula1.com/en/latest/article/test-fixture',
+      source: 'test-fixture', isOfficial: true, sourceType: 'official'
+    }]
+  }));
 
   await t.test('1. 搜索关键词清洗、指令剔除与动态日期解析', () => {
     // 1.1 剔除指令词与格式要求
