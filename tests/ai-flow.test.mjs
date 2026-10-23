@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { defaultAIOrchestrator } from '../lib/ai/orchestrator.ts';
 import { defaultF1Service } from '../providers/f1/service.ts';
+import {installOfflineOverview} from './fixtures/offline-overview.mjs';
+installOfflineOverview();
 
 const ROOT_DIR = process.cwd();
 

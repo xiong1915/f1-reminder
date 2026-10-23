@@ -1,0 +1,11 @@
+name = "f1-reminder-worker"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = ["*/1 * * * *"]
+
+[vars]
+FEISHU_APP_ID = "cli_aa4fac838bf85bb5"
+# 敏感凭据（UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, FEISHU_WEBHOOK_URL, CRON_SECRET）
+# 请使用 `wrangler secret put <KEY>` 或 Cloudflare 网页控制台安全注入

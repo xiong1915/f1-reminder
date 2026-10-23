@@ -160,7 +160,8 @@ test('Edge Native: checkAndDeliverEdgeReminders 赛前与开赛双阶段触发�
   // 验证开赛提醒卡片样式为红色
   const startCard = feishuCalls[1].card;
   assert.strictEqual(startCard.header.template, 'red');
-  assert.ok(startCard.header.title.content.includes('比赛已正式开赛'));
+  assert.ok(startCard.header.title.content.includes('已到官方赛程时间'));
+  assert.ok(!startCard.header.title.content.includes('比赛已正式开赛'));
 });
 
 test('Worker 彻底分离: 网站网关 cf_worker.js 纯反代，不拦截 /api/cron/reminder，无 scheduled', async () => {
@@ -217,10 +218,12 @@ test('Worker 彻底分离: 独立的 f1-reminder-worker 负责定时 Cron 与提
   const origFetch = globalThis.fetch;
   try {
     globalThis.fetch = async (url) => {
-      return new Response(JSON.stringify([{ result: JSON.stringify({ status: 'ok' }) }]), { status: 200 });
+      return new Response(JSON.stringify([{ result: JSON.stringify({ status: 'ok',checkedAt:new Date().toISOString() }) }]), { status: 200 });
     };
 
-    const healthReq = new Request('https://f1-reminder-worker.internal/health');
+    const privateHealth=await reminderWorker.fetch(new Request('https://f1-reminder-worker.internal/health'),env,{});
+    assert.strictEqual(privateHealth.status,401);
+    const healthReq = new Request('https://f1-reminder-worker.internal/health',{headers:{Authorization:'Bearer test-secret'}});
     const healthRes = await reminderWorker.fetch(healthReq, env, {});
     assert.strictEqual(healthRes.status, 200);
 
@@ -231,12 +234,13 @@ test('Worker 彻底分离: 独立的 f1-reminder-worker 负责定时 Cron 与提
     const unauthRes = await reminderWorker.fetch(unauthReq, env, {});
     assert.strictEqual(unauthRes.status, 401);
 
-    // 4. /trigger 鉴权机制：已授权 -> 200
+    // 4. Authorized POST reaches checking; unavailable calendar must report 503.
     const authReq = new Request('https://f1-reminder-worker.internal/trigger', {
+      method:'POST',
       headers: { 'Authorization': 'Bearer test-secret' }
     });
     const authRes = await reminderWorker.fetch(authReq, env, {});
-    assert.strictEqual(authRes.status, 200);
+    assert.strictEqual(authRes.status, 503);
 
     // 5. /trigger 安全门禁：未配置 CRON_SECRET 时必须默认拒绝 (fail-closed) -> 401
     const noSecretRes = await reminderWorker.fetch(authReq, { ...env, CRON_SECRET: '' }, {});
