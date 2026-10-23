@@ -30,3 +30,6 @@ scratch_check_*.cjs
 .vercel
 .env*
 *.tsbuildinfo
+
+# Keep the standalone reminder deployment configuration.
+!/workers/f1-reminder-worker/wrangler.toml
