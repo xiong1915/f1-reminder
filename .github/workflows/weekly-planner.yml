@@ -74,6 +74,8 @@ jobs:
           SCHEDULE_CRON: ''
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL || secrets.PUSH_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           PUSHPLUS_CHANNEL: ${{ secrets.PUSHPLUS_CHANNEL || 'wechat' }}
         run: node reminder.js
       - name: Save updated history

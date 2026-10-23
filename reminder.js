@@ -403,6 +403,14 @@ async function main() {
   }
 
   const now = new Date();
+  if(process.env.WEEKLY_PLAN==='true') {
+    // Both cloud schedulers share the same official verification and Redis atomic claims.
+    const {checkAndDeliverEdgeReminders}=await import('./src/worker/reminder_edge.js');
+    const result=await checkAndDeliverEdgeReminders(process.env,{source:'github'});
+    console.log(JSON.stringify(result));
+    if(result.errors?.length || result.results.some(r=>['failed','uncertain','storage_error'].includes(r.status))) throw Error('Reminder delivery needs retry; inspect reported status');
+    return;
+  }
   const beijingTimeStr = new Date(now.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
   console.log('=============================================');
   console.log(`当前时间 (北京时间): ${beijingTimeStr}`);
@@ -421,7 +429,7 @@ async function main() {
       throw new Error('每周提醒计划缺失、损坏或已过期，请运行 F1 Weekly Planner');
     }
     const triggerCron = process.env.SCHEDULE_CRON || '';
-    sessions = plan.sessions.filter(s => 
+    sessions = plan.sessions.filter(s =>
       !triggerCron ||
       s.reminder_cron === triggerCron ||
       s.backup_cron === triggerCron ||

@@ -2,9 +2,11 @@
 // Cloudflare Worker Edge Native 独立提醒引擎 (f1-reminder-worker)
 // 由 1 分钟 Cron 调度，支持赛程缓存降级、API 429 规避与 Redis 原子防重
 
+import officialSchedule from '../providers/official_schedule.js';
+const {verifyOfficialSessions}=officialSchedule;
 const COUNTRY_MAP = {
   "Bahrain": "巴林", "Saudi Arabia": "沙特阿拉伯", "Australia": "澳大利亚", "Japan": "日本",
-  "China": "中国", "United States": "美国", "Italy": "意大利", "Monaco": "摩纳哥",
+  "China": "中国", "United States": "美国", "USA": "美国", "Italy": "意大利", "Monaco": "摩纳哥",
   "Canada": "加拿大", "Spain": "西班牙", "Austria": "奥地利", "Great Britain": "英国",
   "Hungary": "匈牙利", "Belgium": "比利时", "Netherlands": "荷兰", "Azerbaijan": "阿塞拜疆",
   "Singapore": "新加坡", "Mexico": "墨西哥", "Brazil": "巴西", "Qatar": "卡塔尔",
@@ -91,6 +93,7 @@ export function parseErgastRaces(json) {
 
       sessions.push({
         season,
+        circuitId: r.Circuit?.circuitId,
         round,
         sessionId: `${type}-${round}`,
         type,
@@ -115,10 +118,12 @@ export async function redisCall(url, token, command, fetchImpl = globalThis.fetc
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify([command])
+    body: JSON.stringify([command]),
+    signal: AbortSignal.timeout(10000)
   });
   if (!res.ok) throw new Error(`Redis HTTP ${res.status}`);
   const data = await res.json();
+  if(data[0]?.error) throw Error('Redis command rejected: '+data[0].error);
   return data[0]?.result;
 }
 
@@ -282,13 +287,13 @@ export async function getOrFetchCalendar(env, season, nowMs, options = {}) {
 export async function sendFeishuReminder({ webhookUrl, gpName, sessionName, locality, timeStr, remMin, phase, fetchImpl = globalThis.fetch }) {
   const isStart = phase === 'start';
   const headerTitle = isStart
-    ? `🏎️ 【比赛已正式开赛】五盏红灯熄灭`
+    ? `🏎️ 【开赛时间提醒】已到官方赛程时间`
     : (remMin <= 20
       ? `🏎️ 【即将开赛紧急提醒】仅剩 ${remMin} 分钟`
       : `🏎️ F1 比赛开赛提醒 (前30分钟)`);
 
   const noteText = isStart
-    ? `🏁 五盏红灯熄灭，比赛现已开跑！实际是否延迟，请以现场公告为准。`
+    ? `🏁 已到官方赛程开赛时间，实际是否延迟，请以现场公告为准。`
     : (remMin <= 20
       ? `⚠️ 提示：开赛在即（剩余约 ${remMin} 分钟），请立即就位观赛！🏁`
       : `🏁 五盏红灯熄灭，精彩即将开赛，请做好观赛准备！`);
@@ -354,6 +359,7 @@ export async function sendFeishuReminder({ webhookUrl, gpName, sessionName, loca
     bizErr.isRejected = true;
     throw bizErr;
   }
+  if(data.code!==0 && data.StatusCode!==0) throw Error('Feishu response missing explicit success code');
   return data;
 }
 
@@ -365,6 +371,7 @@ export async function checkAndDeliverEdgeReminders(env, options = {}) {
   const redisUrl = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
   const redisToken = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
   const webhookUrl = env.FEISHU_WEBHOOK_URL || env.PUSH_KEY;
+  if(!redisUrl||!redisToken||!webhookUrl) throw Error('Redis and Feishu webhook are required');
 
   let season = String(new Date(nowMs).getUTCFullYear());
   
@@ -383,6 +390,9 @@ export async function checkAndDeliverEdgeReminders(env, options = {}) {
     } catch (_) {}
   }
 
+  if(!sessions.length) throw Error('Calendar unavailable or empty');
+  const verified=options.sessions?{sessions,official:[]} : await verifyOfficialSessions(sessions,nowMs,fetchImpl);
+  sessions=verified.sessions;
   const results = [];
   const errors = [];
 
@@ -525,7 +535,8 @@ export async function checkAndDeliverEdgeReminders(env, options = {}) {
   const healthPayload = {
     checkedAt: new Date(nowMs).toISOString(),
     scheduledAt: scheduledTime,
-    source: 'cloudflare',
+    source: options.source || 'cloudflare',
+    official: verified.official,
     calendarSource,
     results,
     meetingCount: sessions.length,
@@ -536,7 +547,7 @@ export async function checkAndDeliverEdgeReminders(env, options = {}) {
   if (redisUrl && redisToken) {
     try {
       await redisCall(redisUrl, redisToken, [
-        'set', 'f1:reminder:health:cloudflare', JSON.stringify(healthPayload), 'ex', 604800
+        'set', `f1:reminder:health:${options.source==='github'?'github':'cloudflare'}`, JSON.stringify(healthPayload), 'ex', 604800
       ], fetchImpl);
       await redisCall(redisUrl, redisToken, [
         'set', 'f1:reminder:health', JSON.stringify(healthPayload), 'ex', 604800
