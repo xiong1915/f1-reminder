@@ -3,10 +3,17 @@
 | 字段 | 说明 |
 | :--- | :--- |
 | **资产目录** | `public/circuits/*.svg` |
-| **许可协议** | CC BY-SA 4.0 / FIA Public Topological Specifications |
+| **许可协议** | MIT；保留 Tomislav Bacinger [原始版权与许可声明](../lib/circuits/data/LICENSE.md) |
 | **维护责任** | APEX V3 Engineering |
 | **版本规范** | 2026 Formula 1 World Championship Track Configurations |
 | **数据清洗** | 已执行自动化安全剥离（0 script / 0 foreignObject / 0 inline events） |
+
+## 已核实的来源与许可
+
+- 上游：[bacinger/f1-circuits](https://github.com/bacinger/f1-circuits)，作者 Tomislav Bacinger；上游许可与内置 `lib/circuits/data/LICENSE.md` 一致（MIT，Copyright (c) 2019-2025）。
+- `scripts/generate-circuits.mjs` 读取内置 GeoJSON；2026-10-23 在隔离临时目录重新生成，两个仓库各 40 个 SVG 均与生成结果逐字节一致。原始许可同样适用于派生几何，发布时须随附。
+- 本次核查未找到支持旧文档中 “CC BY-SA 4.0 / FIA Public Topological Specifications” 声明的授权材料，因此按可核实的上游 MIT 声明更正；这不表示获得 FIA 或 Formula 1 官方认可。
+- 下表为历史归档，保留原始记录；不代表已核验现行赛季配置或哈希。
 
 ## 2026 赛季 23 站赛道拓扑清单与 SHA-256 指纹
 
