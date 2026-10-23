@@ -16,7 +16,10 @@ export default {
     const url = new URL(request.url);
 
     // 纯反向代理：所有路径（包括 /api/cron/reminder、/races、/ 等）直通转发至上游前端 (apex-v3-web / Vercel)
-    const targetUrl = new URL(url.pathname + url.search, env.UPSTREAM_ORIGIN || UPSTREAM_ORIGIN);
+    const targetUrl = new URL(env.UPSTREAM_ORIGIN || UPSTREAM_ORIGIN);
+    targetUrl.pathname = url.pathname;
+    targetUrl.search = url.search;
+    targetUrl.hash = '';
 
     const reqHeaders = new Headers(request.headers);
     reqHeaders.set('X-Forwarded-Host', url.host);

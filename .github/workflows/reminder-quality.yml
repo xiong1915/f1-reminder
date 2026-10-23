@@ -6,6 +6,25 @@ on:
 permissions:
   contents: read
 jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      STORAGE_PROVIDER: memory
+      AI_FALLBACK_PROVIDER: none
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run quality
   reminders:
     name: Reminder regression
     runs-on: ubuntu-latest
