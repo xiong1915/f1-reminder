@@ -323,12 +323,16 @@ export async function sendFeishuReminder({ webhookUrl, gpName, sessionName, loca
     }
   };
 
+  return sendFeishuPayload({webhookUrl,payload:cardPayload,fetchImpl});
+}
+
+export async function sendFeishuPayload({webhookUrl,payload,fetchImpl=globalThis.fetch}) {
   let res;
   try {
     res = await fetchImpl(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(cardPayload),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000)
     });
   } catch (err) {

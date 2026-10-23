@@ -62,7 +62,7 @@ function renderWorkflow(template, plan) {
   }
   const crons = [...new Set(allCrons)];
   // The health-check cadence must survive weekly regeneration, including empty weeks.
-  const schedule = '  schedule:\n' + [...new Set(['*/15 * * * 5,6,0', '0 * * * 1-4', ...crons])].map(cron => "    - cron: '" + cron + "'").join('\n');
+  const schedule = '  schedule:\n' + [...new Set(['*/5 * * * *', ...crons])].map(cron => "    - cron: '" + cron + "'").join('\n');
   if (!template.includes('__SCHEDULE__')) throw new Error('缺少定时配置模板标记');
   return template.replace('__SCHEDULE__', schedule);
 }

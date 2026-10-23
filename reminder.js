@@ -406,9 +406,17 @@ async function main() {
   if(process.env.WEEKLY_PLAN==='true') {
     // Both cloud schedulers share the same official verification and Redis atomic claims.
     const {checkAndDeliverEdgeReminders}=await import('./src/worker/reminder_edge.js');
+    let monitorError;
+    if(process.env.REMINDER_WATCHDOG==='true') {
+      try {
+        const {watchPrimaryHealth}=await import('./src/worker/reminder_watchdog.js');
+        console.log(JSON.stringify({watchdog:await watchPrimaryHealth(process.env)}));
+      } catch(error) {monitorError=error;console.warn('Reminder watchdog failed; continuing fallback delivery');}
+    }
     const result=await checkAndDeliverEdgeReminders(process.env,{source:'github'});
     console.log(JSON.stringify(result));
     if(result.errors?.length || result.results.some(r=>['failed','uncertain','storage_error'].includes(r.status))) throw Error('Reminder delivery needs retry; inspect reported status');
+    if(monitorError) throw monitorError;
     return;
   }
   const beijingTimeStr = new Date(now.getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);

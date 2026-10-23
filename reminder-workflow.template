@@ -1,7 +1,7 @@
 name: F1 Race 30-Min Reminder
 # 注意：GitHub Actions 定时为异步次级灾备兜底通道 (Secondary Fallback)，受 Runner 排队影响存在调度延迟；
 # 主准点提醒由 Cloudflare 独立 Worker (f1-reminder-worker) 每分钟 Cron 执行。
-# 工作日 1 小时与周末 15 分钟为心跳检查，遇漏发在合法窗口期内安全补发，不声明排队零延迟的准点保证。
+# 每五分钟自动检查主调度健康并执行备用提醒；故障及恢复按事件限频通知。
 
 on:
 __SCHEDULE__
@@ -35,6 +35,7 @@ jobs:
       - name: Run F1 Reminder Check
         env:
           WEEKLY_PLAN: 'true'
+          REMINDER_WATCHDOG: 'true'
           SCHEDULE_CRON: ${{ github.event.schedule || '' }}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL || secrets.PUSH_KEY }}
