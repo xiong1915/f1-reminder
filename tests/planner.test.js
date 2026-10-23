@@ -90,7 +90,7 @@ test('Planner: 无比赛周保留云端健康检查，不产生赛事提醒', ()
 
   const template = 'name: Test\non:\n__SCHEDULE__\njobs: {}';
   const workflow = renderWorkflow(template, plan);
-  assert.strictEqual(workflow.includes("cron: '*/15 * * * 5,6,0'"), true, '无比赛周仍检查数据与定时器健康');
+  assert.strictEqual(workflow.includes("cron: '*/5 * * * *'"), true, '无比赛周仍每五分钟检查数据与定时器健康');
 });
 
 test('Jolpica: sprint qualifying, UTC conversion and missing times', () => {

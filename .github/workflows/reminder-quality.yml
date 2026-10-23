@@ -20,4 +20,4 @@ jobs:
       - name: Check reminder syntax
         run: node --check reminder.js && node --check weekly-planner.js
       - name: Run offline reminder regression tests
-        run: node --test tests/reminder-cli.test.mjs tests/reminder-live-validation.test.mjs tests/reminder-precision-and-dedup.test.mjs tests/cf_worker.test.js tests/cross-system-dedup.test.js tests/history.test.js tests/timing.test.js tests/delivery-state.test.js tests/planner.test.js tests/workflow.test.js tests/cache-fallback.test.js
+        run: node --test tests/reminder-watchdog.test.mjs tests/reminder-cli.test.mjs tests/reminder-live-validation.test.mjs tests/reminder-precision-and-dedup.test.mjs tests/cf_worker.test.js tests/cross-system-dedup.test.js tests/history.test.js tests/timing.test.js tests/delivery-state.test.js tests/planner.test.js tests/workflow.test.js tests/cache-fallback.test.js

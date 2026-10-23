@@ -12,6 +12,6 @@ globalThis.fetch=async(url,options={})=>{
   }));
   if(address.startsWith('https://api.jolpi.ca/')) return Response.json({MRData:{RaceTable:{Races:[{season:new Date().getUTCFullYear(),round:18,raceName:'United States Grand Prix',Circuit:{circuitId:'americas',Location:{country:'United States',locality:'Austin'}},FirstPractice:field(start),Qualifying:field(quali),...field(race)}]}}});
   if(address.startsWith('https://www.formula1.com/')) return new Response(`<script type="application/ld+json">${JSON.stringify({subEvent:[['Practice 1',start],['Qualifying',quali],['Race',race]].map(([name,startDate])=>({'@type':'SportsEvent',name:name+' - United States Grand Prix',startDate}))})}</script>`);
-  if(address==='https://open.feishu.cn/test-only') return Response.json({code:0});
+  if(address==='https://open.feishu.cn/test-only') return Response.json({code:process.env.FIXTURE_ALERT_REJECT==='true'&&JSON.parse(options.body).msg_type==='text'?19021:0});
   throw Error('Unexpected network destination');
 };

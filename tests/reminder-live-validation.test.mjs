@@ -9,7 +9,7 @@ const session={season:'2026',round:'18',circuitId:'americas',sessionId:'fp1-18',
 function official(time) {return `<script type="application/ld+json">${JSON.stringify({subEvent:[{'@type':'SportsEvent',name:'Practice 1 - United States Grand Prix',startDate:time},{'@type':'SportsEvent',name:'Qualifying - United States Grand Prix',startDate:'2026-10-24T21:00:00Z'},{'@type':'SportsEvent',name:'Race - United States Grand Prix',startDate:'2026-10-25T20:00:00Z'}]})}</script>`;}
 test('live official time replaces cached practice time before delivery selection',async()=>{
   const {verifyOfficialSessions}=require('../src/providers/official_schedule');
-  const result=await verifyOfficialSessions([session],Date.parse('2026-10-23T17:00:00Z'),async()=>new Response(official('2026-10-23T18:00:00Z')));
+  const result=await verifyOfficialSessions([session],Date.parse('2026-10-23T17:00:00Z'),async(url,options)=>{assert.equal('cache' in options,false);assert.equal(options.headers['Cache-Control'],'no-cache');return new Response(official('2026-10-23T18:00:00Z'));});
   assert.equal(result.sessions[0].startTimeUTC,'2026-10-23T18:00:00.000Z');
   assert.equal(result.official[0].changes.length,1);
 });

@@ -27,7 +27,7 @@ async function verifyOfficialSessions(sessions,nowMs,fetchImpl=globalThis.fetch)
     groups.get(url).push(session);
   }
   for(const [sourceUrl,group] of groups) {
-    const response=await fetchImpl(sourceUrl,{cache:'no-store',signal:AbortSignal.timeout(10000),headers:{Accept:'text/html'}});
+    const response=await fetchImpl(sourceUrl,{signal:AbortSignal.timeout(10000),headers:{Accept:'text/html','Cache-Control':'no-cache'}});
     if(!response.ok) throw Error('Official schedule HTTP '+response.status);
     const times=parseOfficialTimes(await response.text(),group[0].season),changes=[];
     for(const session of group) {
