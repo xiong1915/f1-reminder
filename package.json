@@ -2,6 +2,7 @@
   "name": "tike-f1",
   "version": "3.0.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "npm@11.17.0",
   "description": "TIKE V3 - Formula 1 Data + Intelligence Platform",
   "scripts": {
