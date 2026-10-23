@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import {installOfflineOverview} from './fixtures/offline-overview.mjs';
+installOfflineOverview();
 
 test('Phase 10 专项验收与严谨性核验', async (t) => {
   const {

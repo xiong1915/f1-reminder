@@ -3,6 +3,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert';
+import {installOfflineOverview} from './fixtures/offline-overview.mjs';
+installOfflineOverview();
 
 test('AI 联网检索、事实一致性与完赛自动同步专项测试', async (t) => {
   const { defaultAIOrchestrator } = await import('../lib/ai/orchestrator.ts');
