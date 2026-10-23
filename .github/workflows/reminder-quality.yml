@@ -1,0 +1,23 @@
+name: Reminder quality
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  reminders:
+    name: Reminder regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check reminder syntax
+        run: node --check reminder.js && node --check weekly-planner.js
+      - name: Run offline reminder regression tests
+        run: node --test tests/reminder-cli.test.mjs tests/reminder-live-validation.test.mjs tests/reminder-precision-and-dedup.test.mjs tests/cf_worker.test.js tests/cross-system-dedup.test.js tests/history.test.js tests/timing.test.js tests/delivery-state.test.js tests/planner.test.js tests/workflow.test.js tests/cache-fallback.test.js
