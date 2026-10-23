@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {checkAndDeliverEdgeReminders,sendFeishuReminder} from '../src/worker/reminder_edge.js';
-import worker from '../workers/f1-reminder-worker/worker.js';
+import rawWorker from '../workers/f1-reminder-worker/worker.js';
+const worker=rawWorker?.fetch?rawWorker:rawWorker.default;
 const require=createRequire(import.meta.url);
 const session={season:'2026',round:'18',circuitId:'americas',sessionId:'fp1-18',sessionName:'Practice 1',gpName:'美国大奖赛',locality:'Austin',startTimeUTC:'2026-10-23T17:30:00.000Z',startTimeMs:Date.parse('2026-10-23T17:30:00Z')};
 function official(time) {return `<script type="application/ld+json">${JSON.stringify({subEvent:[{'@type':'SportsEvent',name:'Practice 1 - United States Grand Prix',startDate:time},{'@type':'SportsEvent',name:'Qualifying - United States Grand Prix',startDate:'2026-10-24T21:00:00Z'},{'@type':'SportsEvent',name:'Race - United States Grand Prix',startDate:'2026-10-25T20:00:00Z'}]})}</script>`;}
