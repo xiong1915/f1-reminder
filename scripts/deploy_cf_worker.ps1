@@ -1,11 +1,18 @@
+# Deploy the existing Cloudflare Worker using an explicitly supplied token.
+# Never extract credentials from Antigravity transcripts, shell history, or project files.
 $ErrorActionPreference = 'Stop'
 
-$transcript = Get-Content 'C:\Users\Administrator\.gemini\antigravity\brain\177d99ed-9770-4077-9346-f62578c5334c\.system_generated\logs\transcript.jsonl' -Raw
-if ($transcript -match 'CLOUDFLARE_API_TOKEN=\\?"([a-zA-Z0-9_-]+)\\?"') {
-    $env:CLOUDFLARE_API_TOKEN = $matches[1]
-    Write-Host "Cloudflare Token set."
-    $pnpm = 'C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\pnpm\bin\pnpm.cjs'
-    & node $pnpm dlx wrangler deploy
-} else {
-    Write-Error "No Cloudflare token found."
+if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_API_TOKEN)) {
+    throw 'CLOUDFLARE_API_TOKEN is required. Supply it via a secure environment/credential provider before deployment.'
+}
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Push-Location $repoRoot
+try {
+    npx.cmd wrangler deploy
+    if ($LASTEXITCODE -ne 0) {
+        throw "Wrangler deploy failed with exit code $LASTEXITCODE"
+    }
+} finally {
+    Pop-Location
 }
